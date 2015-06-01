@@ -29,6 +29,19 @@ def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
   TotalLenOfFile = NumOfUDPsPerDump*NumOfFileDumps*LdataUdp
   return data[0:TotalLenOfFile]
 
+def decode_chan(data,ADCbnFrameAddr,nADCchan,nByte,LADCbBuff,nChan,SampleDecimation,beam='b1'):
+  #extract ADCb[12] buffer
+  ADCbnFrames = data['header'][:,ADCbnFrameAddr-1]
+  nTotalADCbBuffDataFrames = sum(ADCbnFrames)
+  if(beam=='b1'):
+    ADCbData = _np.hstack(_np.array([ data['data'][idx,0:ADCbnFrames[idx]*nADCchan*nByte] for idx in range(len(ADCbnFrames)) ]))
+  if(beam=='b2'):
+    ADCbData = _np.hstack(_np.array([ data['data'][idx,LADCbBuff:LADCbBuff+ADCbnFrames[idx]*nADCchan*nByte] for idx in range(len(ADCbnFrames)) ]))
+  #decode channel data
+  ADCbdataDec=_np.array([ (2**24*ADCbData[4*idx]+2**16*ADCbData[4*idx+1]+2**8*ADCbData[4*idx+2]+ADCbData[4*idx+3]+2**23) & (2**24-1) for idx in range(nTotalADCbBuffDataFrames*nChan) ],dtype=float)
+  ADCchanTable = _np.array([ ADCbdataDec[idx:idx+nTotalADCbBuffDataFrames*nChan:SampleDecimation*nChan] for idx in range(nChan) ])
+  return ADCchanTable
+
 def chan_to_orb(ADCchanTable):
   [bh1,bh2,bv1,bv2]=ADCchanTable[0:4]/(2**24-1)
   bh=(bh1-bh2)/(bh1+bh2)
@@ -70,19 +83,9 @@ class doros():
   @classmethod
   def getdata(cls,fn):
     data=readbinary(fn,cls.LheaderData,cls.LheaderUdp,cls.LdataUdp)
-    #extract ADCb[12] buffer
-    ADCb1nFrames = data['header'][:,cls.ADCb1nFrameAddr-1]
-    ADCb2nFrames = data['header'][:,cls.ADCb2nFrameAddr-1]
-    nTotalADCb1BuffDataFrames = sum(ADCb1nFrames)
-    nTotalADCb2BuffDataFrames = sum(ADCb2nFrames)
+    ADC1chanTable=decode_chan(data,cls.ADCb1nFrameAddr,cls.nADCchan,cls.nByte,cls.LADCbBuff,cls.nChan,cls.SampleDecimation,beam='b1')
+    ADC2chanTable=decode_chan(data,cls.ADCb2nFrameAddr,cls.nADCchan,cls.nByte,cls.LADCbBuff,cls.nChan,cls.SampleDecimation,beam='b2')
     #number of valid frames per udp ADC1 buffer
-    ADCb1Data = _np.hstack(_np.array([ data['data'][idx,0:ADCb1nFrames[idx]*cls.nADCchan*cls.nByte] for idx in range(len(ADCb1nFrames)) ]))
-    ADCb2Data = _np.hstack(_np.array([ data['data'][idx,cls.LADCbBuff:cls.LADCbBuff+ADCb2nFrames[idx]*cls.nADCchan*cls.nByte] for idx in range(len(ADCb2nFrames)) ]))
-    #decode channel data
-    ADCb1dataDec=_np.array([ (2**24*ADCb1Data[4*idx]+2**16*ADCb1Data[4*idx+1]+2**8*ADCb1Data[4*idx+2]+ADCb1Data[4*idx+3]+2**23) & (2**24-1) for idx in range(nTotalADCb1BuffDataFrames*cls.nChan) ],dtype=float)
-    ADCb2dataDec=_np.array([ (2**24*ADCb2Data[4*idx]+2**16*ADCb2Data[4*idx+1]+2**8*ADCb2Data[4*idx+2]+ADCb2Data[4*idx+3]+2**23) & (2**24-1) for idx in range(nTotalADCb2BuffDataFrames*cls.nChan) ], dtype=float)
-    ADC1chanTable = _np.array([ ADCb1dataDec[idx:idx+nTotalADCb1BuffDataFrames*cls.nChan:cls.SampleDecimation*cls.nChan] for idx in range(cls.nChan) ])
-    ADC2chanTable = _np.array([ ADCb2dataDec[idx:idx+nTotalADCb2BuffDataFrames*cls.nChan:cls.SampleDecimation*cls.nChan] for idx in range(cls.nChan) ])
     b1h,b1v=chan_to_orb(ADC1chanTable)
     b2h,b2v=chan_to_orb(ADC2chanTable)
     return cls(b1h,b1v,b2h,b2v)
