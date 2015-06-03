@@ -1,6 +1,9 @@
 """class to import data from DOROS BPMs"""
 import numpy as _np
+import matplotlib.pyplot as _pl
 import os
+import cPickle as pickle
+import glob as glob
 
 def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
   """read in the binary file with filename fn
@@ -14,6 +17,8 @@ def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
     UDPheader (LheaderUdp)
     Data"""
   # dataAll=_np.fromfile(file=fn,dtype=_np.uint8,count=-1,sep="") #get the full data
+#    adc=ADCb1Data.view('uint32')
+#    LeAll = os.path.getsize(fn)#total file byte length
   ff = open(fn,'rb')
   header = map(ord,ff.read(LheaderData))
   NumOfFileDumps   = header[0]+header[1]*2**8+header[2]*2**16+header[3]*2**24 #number of files dumped
@@ -21,13 +26,15 @@ def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
   ff.seek(LheaderData)# remove the Dataheader
   ftype=_np.dtype([('header','%su1'%(LheaderUdp)),('data','%su1'%(LdataUdp))])
   data=_np.fromfile(file=ff,dtype=ftype,count=-1,sep="") #get the full data
+  udpcheck=True
   if(NumOfUDPsPerDump!=len(data['header'])):
     print 'WARNING: file corrupted as number of UDP dumps != number of UDPs in file'
     print 'number of UDP dumps:    %s'%(NumOfUDPsPerDump)
     print 'number of UDPs in file: %s'%(len(data['header']))
+    udpcheck=False
   #cut away 0 at end of file
   TotalLenOfFile = NumOfUDPsPerDump*NumOfFileDumps*LdataUdp
-  return data[0:TotalLenOfFile]
+  return data[0:TotalLenOfFile],udpcheck
 
 def decode_chan(data,ADCbnFrameAddr,nADCchan,nByte,LADCbBuff,nChan,SampleDecimation,beam='b1'):
   #extract ADCb[12] buffer
@@ -42,12 +49,6 @@ def decode_chan(data,ADCbnFrameAddr,nADCchan,nByte,LADCbBuff,nChan,SampleDecimat
   ADCchanTable = _np.array([ ADCbdataDec[idx:idx+nTotalADCbBuffDataFrames*nChan:SampleDecimation*nChan] for idx in range(nChan) ])
   return ADCchanTable
 
-def chan_to_orb(ADCchanTable):
-  [bh1,bh2,bv1,bv2]=ADCchanTable[0:4]/(2**24-1)
-  bh=(bh1-bh2)/(bh1+bh2)
-  bv=(bv1-bv2)/(bv1+bv2)
-  return bh,bv
-
 class doros():
   """class to import data from DOROS BPMS"""
   #---- define parameters used for import the datafile ----
@@ -57,7 +58,7 @@ class doros():
   #for BPMSW (d = 61) 15.25 mm
   PUgain=15250
   #ADC=Analog to Digital Converter parameters
-  FsamADC = (40*10^6)/3564.0
+  FsamADC = (40*1.e6)/3564.0
   Vref = 2.5
   FullScale = 2^24
   #Decoding parameters
@@ -78,19 +79,29 @@ class doros():
   #UDP per frame
   LdataUdp = nByte*nChan*nFramePerADCb*nADCBuff #number of bytes of UDP data
   Ludp = LheaderUdp + LdataUdp #UDP header + data length
-  def __init__(self,b1h=[],b1v=[],b2h=[],b2v=[]):
-    self.data={'b1h':_np.array(b1h),'b1v':_np.array(b1v),'b2h':_np.array(b2h),'b2v':_np.array(b2v)}
+  def __init__(self,b1h1=[],b1h2=[],b1v1=[],b1v2=[],b2h1=[],b2h2=[],b2v1=[],b2v2=[]):
+    self.data={'b1h1':_np.array(b1h1),'b1h2':_np.array(b1h2),'b1v1':_np.array(b1v1),'b1v2':_np.array(b1v2),'b2h1':_np.array(b2h1),'b2h2':_np.array(b2h2),'b2v1':_np.array(b2v1),'b2v2':_np.array(b2v2)}
   @classmethod
-  def getdata(cls,fn):
-    data=readbinary(fn,cls.LheaderData,cls.LheaderUdp,cls.LdataUdp)
-    ADC1chanTable=decode_chan(data,cls.ADCb1nFrameAddr,cls.nADCchan,cls.nByte,cls.LADCbBuff,cls.nChan,cls.SampleDecimation,beam='b1')
-    ADC2chanTable=decode_chan(data,cls.ADCb2nFrameAddr,cls.nADCchan,cls.nByte,cls.LADCbBuff,cls.nChan,cls.SampleDecimation,beam='b2')
-    #number of valid frames per udp ADC1 buffer
-    b1h,b1v=chan_to_orb(ADC1chanTable)
-    b2h,b2v=chan_to_orb(ADC2chanTable)
-    return cls(b1h,b1v,b2h,b2v)
-#    adc=ADCb1Data.view('uint32')
-#    LeAll = os.path.getsize(fn)#total file byte length
+  def getdata(cls,fn,force=False):
+    if(fn.split('.')[-1]=='bin'):
+      fn=fn[0:-4]
+    if(fn.split('.')[-1]=='p'):
+      fn=fn[0:-2]
+    if(os.path.isfile(fn+'.p') and force==False):
+      b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2=pickle.load(open(fn+'.p',"rb"))
+    else:
+      data,udpcheck=readbinary(fn+'.bin',cls.LheaderData,cls.LheaderUdp,cls.LdataUdp)
+      if(udpcheck):#only process data if udp check passed
+        ADC1chanTable=decode_chan(data,cls.ADCb1nFrameAddr,cls.nADCchan,cls.nByte,cls.LADCbBuff,cls.nChan,cls.SampleDecimation,beam='b1')
+        ADC2chanTable=decode_chan(data,cls.ADCb2nFrameAddr,cls.nADCchan,cls.nByte,cls.LADCbBuff,cls.nChan,cls.SampleDecimation,beam='b2')
+        #number of valid frames per udp ADC1 buffer
+        [b1h1,b1h2,b1v1,b1v2]=ADC1chanTable[0:4]/(2**24-1)
+        [b2h1,b2h2,b2v1,b2v2]=ADC2chanTable[0:4]/(2**24-1)
+        #store already processed orbit data in *.p
+        pickle.dump([b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2],open(fn+'.p',"wb"))  
+      else:
+        [b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2]=[[] for x in range(8)]
+    return cls(b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2)
   def checkdata(self,fn):
     """check for errors in data acquisition"""
     LeAll = os.path.getsize(fn)#total file byte length
@@ -107,8 +118,64 @@ class doros():
     #check FIFO overflow
     FIFOovfl = sum(dataAll[self.LheaderData + self.FIFOovfladdr-1:self.LheaderData + self.FIFOovfladdr+self.Ludp*(nUdp-1)-1:self.Ludp])
     print "FIFOovfl =%d"%(FIFOovfl)
-   
-#  def getdatadir(dirname=''):
-#    """get data from a directory"""
-#  
-#    return dirname
+  @classmethod
+  def process_dir(cls,dn,force=False):
+    """process orbit data in directory dn and
+    store it in *.p files"""
+    for fn in glob.glob(dn+'/*.bin'):
+      if(os.path.isfile(fn[0:-4]+'.p') and force==False):
+        print fn+' is already processed'
+      else:
+        print 'processing '+fn
+        cls.getdata(fn,force=force)
+  def orb(self):
+    """returns a dictionary with the orbit b1h,b1v,b2h,b2v in mum,
+    where the orbit is defined by the signlas by e.g.:
+    b1h=(b1h1-b1h2)/(b1h1+b1h2)"""
+    #number of valid frames per udp ADC1 buffer
+    dic={}
+    for bb in 'b1','b2':
+      for pp in 'h','v':
+        dic[bb+pp]=(self.data[bb+pp+'1']-self.data[bb+pp+'2'])/(self.data[bb+pp+'1']+self.data[bb+pp+'2'])
+    return dic
+  def plot_orb(self,refidx=None):
+    """plot orbit position change in mum
+    if refidx=None: plot e.g. data['b1h']
+    if refidx=7: plot e.g. data['b1h']-data['b1h'][7]
+    """
+    f,ax=_pl.subplots(2)
+    for bb in [1,2]:
+      for pp in 'h','v':
+        if(refidx==None):
+          ax[bb-1].plot(self.PUgain*self.orb()['b'+str(bb)+pp],label=('b'+str(bb)+pp).upper()) 
+        else:
+          ax[bb-1].plot(self.PUgain*(self.orb()['b'+str(bb)+pp]-self.orb()['b'+str(bb)+pp][refidx]),label=('b'+str(bb)+pp).upper())
+        ax[bb-1].set_xlabel('number of turns') 
+        ax[bb-1].set_ylabel(r'z [$\mu$m]') 
+        ax[bb-1].legend()
+  def plot_fft_max(self,bb='b1h',NFFT=None):
+    """plot the fft spectrum in dB, where the amplitude is normalized
+    in respect of the maximum value:
+    fft_1=2*abs(fft(b1h1-b1h2))
+    fft=20*log10(fft_1/max(fft_1))
+    """
+    bz1=bb+'1'
+    bz2=bb+'2'
+    if(NFFT==None):
+      if(len(self.data[bz1])==len(self.data[bz2])):
+        NFFT=len(self.data[bz1]) #take all datapoints for the FFT 
+        print 'NFFT='+str(NFFT)
+      else:
+        print 'WARNING: length of '+bz1+' and '+bz2+'differ! Use len('+bz1+') for FFT'
+    p1=self.data[bz1][0:NFFT]
+    p2=self.data[bz2][0:NFFT]
+    orbfft=2*_np.abs(_np.fft.rfft(p1-p2))
+    #normalize to maximum signal
+    orbfft=20*_np.log10(orbfft/(orbfft.max()))
+    #scale from data points to frequency [Hz]
+    FFtscale=self.FsamADC/(NFFT-1)
+    ff=_np.arange(NFFT/2+1)*FFtscale
+    _pl.plot(ff,orbfft)
+    _pl.xlabel('f [Hz]')
+    _pl.ylabel('dB')
+    _pl.grid()

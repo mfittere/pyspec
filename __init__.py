@@ -1,2 +1,1 @@
-from spec import spec
-
+from doros import doros
