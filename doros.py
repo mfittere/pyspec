@@ -18,7 +18,6 @@ def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
     Data"""
   # dataAll=_np.fromfile(file=fn,dtype=_np.uint8,count=-1,sep="") #get the full data
 #    adc=ADCb1Data.view('uint32')
-#    LeAll = os.path.getsize(fn)#total file byte length
   ff = open(fn,'rb')
   header = map(ord,ff.read(LheaderData))
   NumOfFileDumps   = header[0]+header[1]*2**8+header[2]*2**16+header[3]*2**24 #number of files dumped
@@ -28,13 +27,18 @@ def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
   data=_np.fromfile(file=ff,dtype=ftype,count=-1,sep="") #get the full data
   udpcheck=True
   if(NumOfUDPsPerDump!=len(data['header'])):
+    udpcheck=False
     print 'WARNING: file corrupted as number of UDP dumps != number of UDPs in file'
     print 'number of UDP dumps:    %s'%(NumOfUDPsPerDump)
     print 'number of UDPs in file: %s'%(len(data['header']))
-    udpcheck=False
-  #cut away 0 at end of file
-  TotalLenOfFile = NumOfUDPsPerDump*NumOfFileDumps*LdataUdp
-  return data[0:TotalLenOfFile],udpcheck
+    print 'lenght of file in bytes:%s'%(os.path.getsize(fn))
+#    print '... remove zeros from end of file ...'
+#    Ludp = LheaderUdp + LdataUdp
+#    TotalLenOfFile = NumOfUDPsPerDump*NumOfFileDumps*Ludp+LheaderData
+#    nUdp = NumOfUDPsPerDump*NumOfFileDumps
+#    data['header']=data[LheaderData+Ludp:LheaderData + Ludp*(nUdp-1) +LheaderUdp:Ludp]
+#  return data[0:TotalLenOfFile],udpcheck
+  return data,udpcheck
 
 def decode_chan(data,ADCbnFrameAddr,nADCchan,nByte,LADCbBuff,nChan,SampleDecimation,beam='b1'):
   #extract ADCb[12] buffer
@@ -99,6 +103,7 @@ class doros():
         [b2h1,b2h2,b2v1,b2v2]=ADC2chanTable[0:4]/(2**24-1)
         #store already processed orbit data in *.p
         pickle.dump([b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2],open(fn+'.p',"wb"))  
+        print '... store b1h1,b1h2,b2h1,b2h2 etc. in file %s.p for faster reload'%(fn.split('/')[-1])
       else:
         [b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2]=[[] for x in range(8)]
     return cls(b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2)
