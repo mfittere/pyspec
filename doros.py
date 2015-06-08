@@ -4,6 +4,7 @@ import matplotlib.pyplot as _pl
 import os
 import cPickle as pickle
 import glob as glob
+import spec as spec
 
 def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
   """read in the binary file with filename fn
@@ -18,6 +19,10 @@ def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
     Data"""
   # dataAll=_np.fromfile(file=fn,dtype=_np.uint8,count=-1,sep="") #get the full data
 #    adc=ADCb1Data.view('uint32')
+  if(fn.split('IP')[1].split('_Data')[0]=='172_18_66_233'):
+    print '... read data from frontend 1'
+  if(fn.split('IP')[1].split('_Data')[0]=='172_18_66_234'):
+    print '... read data from frontend 2'
   ff = open(fn,'rb')
   header = map(ord,ff.read(LheaderData))
   NumOfFileDumps   = header[0]+header[1]*2**8+header[2]*2**16+header[3]*2**24 #number of files dumped
@@ -107,6 +112,19 @@ class doros():
       else:
         [b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2]=[[] for x in range(8)]
     return cls(b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2)
+  def acqutime(self,frev=11245.0):
+    """returns the acquisition time in s assuming a revolution frequency of frev"""
+    ll=len(self.data['b1h1'])
+    lflag=True
+    for bb in 'b1','b2':
+      for pp in 'h1','v1','h2','v2':
+        if((len(self.data[bb+pp])-ll)>1.e-3):
+          lflag=False
+          print '%s: data acquisition of %4.0f samples over %4.2f seconds'%(bb+pp,len(self.data[bb+pp]),len(self.data[bb+pp])/frev)
+    if(lflag):
+      print 'data acquisition over of %4.0f samples over %4.2f seconds'%(ll,ll/frev)
+    else:
+      print 'WARNING: not all b[12][hv][12] arrays have the same length!' 
   def checkdata(self,fn):
     """check for errors in data acquisition"""
     LeAll = os.path.getsize(fn)#total file byte length
@@ -158,7 +176,7 @@ class doros():
         ax[bb-1].set_xlabel('number of turns') 
         ax[bb-1].set_ylabel(r'z [$\mu$m]') 
         ax[bb-1].legend()
-  def plot_fft_max(self,bb='b1h',NFFT=None):
+  def plot_fft(self,bb='b1h',NFFT=None,window=None,lbl='',offset=0):
     """plot the fft spectrum in dB, where the amplitude is normalized
     in respect of the maximum value:
     fft_1=2*abs(fft(b1h1-b1h2))
@@ -172,15 +190,49 @@ class doros():
         print 'NFFT='+str(NFFT)
       else:
         print 'WARNING: length of '+bz1+' and '+bz2+'differ! Use len('+bz1+') for FFT'
-    p1=self.data[bz1][0:NFFT]
-    p2=self.data[bz2][0:NFFT]
-    orbfft=2*_np.abs(_np.fft.rfft(p1-p2))
+    if(window==None):
+      p1=self.data[bz1][0:NFFT]
+      p2=self.data[bz2][0:NFFT]
+      pdiff=p1-p2
+    else:
+      p1=self.data[bz1][0:NFFT]
+      p2=self.data[bz2][0:NFFT]
+      pdiff=window(NFFT)*(p1-p2)
+    orbfft=2*_np.abs(_np.fft.rfft(pdiff))
     #normalize to maximum signal
-    orbfft=20*_np.log10(orbfft/(orbfft.max()))
+    orbfft=offset+20*_np.log10(orbfft/(orbfft.max()))
     #scale from data points to frequency [Hz]
     FFtscale=self.FsamADC/(NFFT-1)
     ff=_np.arange(NFFT/2+1)*FFtscale
-    _pl.plot(ff,orbfft)
+    _pl.plot(ff,orbfft,label=lbl)
+    _pl.xlabel('f [Hz]')
+    _pl.ylabel('dB')
+    _pl.grid()
+  def plot_fft_avg(self,bb='b1h',NFFT=None,NAVG=None,window=None,noverlap=0,lbl='',offset=0):
+    """plot the fft spectrum in dB, where the amplitude is normalized
+    in respect of the maximum value:
+    fft_1=2*abs(fft(b1h1-b1h2))
+    fft=20*log10(fft_1/max(fft_1))
+    The FFT is averages over NAVG consecutive samples
+    """
+    bz1=bb+'1'
+    bz2=bb+'2'
+    if(NFFT==None):
+      if(len(self.data[bz1])==len(self.data[bz2])):
+        NFFT=len(self.data[bz1]) #take all datapoints for the FFT 
+        print 'NFFT='+str(NFFT)
+      else:
+        print 'WARNING: length of '+bz1+' and '+bz2+'differ! Use len('+bz1+') for FFT'
+    p1=self.data[bz1]
+    p2=self.data[bz2]
+    pdiff=p1-p2
+    orbfft=2*_np.abs(spec.rfft_avg(pdiff,NFFT=NFFT,NAVG=NAVG,noverlap=noverlap))
+    #normalize to maximum signal
+    orbfft=offset+20*_np.log10(orbfft/(orbfft.max()))
+    #scale from data points to frequency [Hz]
+    FFtscale=self.FsamADC/(NFFT-1)
+    ff=_np.arange(NFFT/2+1)*FFtscale
+    _pl.plot(ff,orbfft,label=lbl)
     _pl.xlabel('f [Hz]')
     _pl.ylabel('dB')
     _pl.grid()
