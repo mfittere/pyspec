@@ -176,11 +176,16 @@ class doros():
         ax[bb-1].set_xlabel('number of turns') 
         ax[bb-1].set_ylabel(r'z [$\mu$m]') 
         ax[bb-1].legend()
-  def plot_fft(self,bb='b1h',NFFT=None,window=None,lbl='',offset=0):
-    """plot the fft spectrum in dB, where the amplitude is normalized
+  def plot_fft(self,bb='b1h',NFFT=None,window=None,lbl='',N0=0,offset=0):
+    """plot the FFT spectrum in dB, where the amplitude is normalized
     in respect of the maximum value:
     fft_1=2*abs(fft(b1h1-b1h2))
     fft=20*log10(fft_1/max(fft_1))
+    window = window function
+    NFFT   = number of data points used for FFT
+    N0     = use data[N0:N0+NFFT]
+    offset = curve is shifted by offset in plot to distinguish lines
+             which would coincide
     """
     bz1=bb+'1'
     bz2=bb+'2'
@@ -191,12 +196,12 @@ class doros():
       else:
         print 'WARNING: length of '+bz1+' and '+bz2+'differ! Use len('+bz1+') for FFT'
     if(window==None):
-      p1=self.data[bz1][0:NFFT]
-      p2=self.data[bz2][0:NFFT]
+      p1=self.data[bz1][N0:N0+NFFT]
+      p2=self.data[bz2][N0:N0+NFFT]
       pdiff=p1-p2
     else:
-      p1=self.data[bz1][0:NFFT]
-      p2=self.data[bz2][0:NFFT]
+      p1=self.data[bz1][N0:N0+NFFT]
+      p2=self.data[bz2][N0:N0+NFFT]
       pdiff=window(NFFT)*(p1-p2)
     orbfft=2*_np.abs(_np.fft.rfft(pdiff))
     #normalize to maximum signal
