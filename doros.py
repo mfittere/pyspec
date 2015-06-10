@@ -176,16 +176,14 @@ class doros():
         ax[bb-1].set_xlabel('number of turns') 
         ax[bb-1].set_ylabel(r'z [$\mu$m]') 
         ax[bb-1].legend()
-  def plot_fft(self,bb='b1h',NFFT=None,window=None,lbl='',N0=0,offset=0):
-    """plot the FFT spectrum in dB, where the amplitude is normalized
+  def fft(self,bb='b1h',NFFT=None,window=None,N0=0,offset=0):
+    """calculate the FFT spectrum in dB, where the amplitude is normalized
     in respect of the maximum value:
     fft_1=2*abs(fft(b1h1-b1h2))
     fft=20*log10(fft_1/max(fft_1))
     window = window function
     NFFT   = number of data points used for FFT
     N0     = use data[N0:N0+NFFT]
-    offset = curve is shifted by offset in plot to distinguish lines
-             which would coincide
     """
     bz1=bb+'1'
     bz2=bb+'2'
@@ -205,39 +203,53 @@ class doros():
       pdiff=window(NFFT)*(p1-p2)
     orbfft=2*_np.abs(_np.fft.rfft(pdiff))
     #normalize to maximum signal
-    orbfft=offset+20*_np.log10(orbfft/(orbfft.max()))
+    orbfft=20*_np.log10(orbfft/(orbfft.max()))
     #scale from data points to frequency [Hz]
     FFtscale=self.FsamADC/(NFFT-1)
     ff=_np.arange(NFFT/2+1)*FFtscale
-    _pl.plot(ff,orbfft,label=lbl)
+    return ff,orbfft
+  def plot_fft(self,bb='b1h',NFFT=None,window=None,N0=0,offset=0,lbl='',color='b',linestyle='-'):
+    """plot the FFT spectrum in dB, where the amplitude is normalized
+    in respect of the maximum value:
+    fft_1=2*abs(fft(b1h1-b1h2))
+    fft=20*log10(fft_1/max(fft_1))
+    window = window function
+    NFFT   = number of data points used for FFT
+    N0     = use data[N0:N0+NFFT]
+    offset = curve is shifted by offset in plot to distinguish lines
+             which would coincide
+    """
+    ff,orbfft=self.fft(bb=bb,NFFT=NFFT,window=window,N0=N0)
+    _pl.plot(ff,offset+orbfft,color=color,linestyle=linestyle,label=lbl)
     _pl.xlabel('f [Hz]')
     _pl.ylabel('dB')
     _pl.grid()
-  def plot_fft_avg(self,bb='b1h',NFFT=None,NAVG=None,window=None,noverlap=0,lbl='',offset=0):
+  def plot_fft_avg(self,bb='b1h',NFFT=4096,NAVG=None,window=None,noverlap=0,offset=0,lbl='',color='b',linestyle='-'):
     """plot the fft spectrum in dB, where the amplitude is normalized
     in respect of the maximum value:
     fft_1=2*abs(fft(b1h1-b1h2))
     fft=20*log10(fft_1/max(fft_1))
-    The FFT is averages over NAVG consecutive samples
+    The FFT is averaged over NAVG consecutive samples with NFFT
+    points and *overlap* between the different FFTs.
     """
     bz1=bb+'1'
     bz2=bb+'2'
-    if(NFFT==None):
-      if(len(self.data[bz1])==len(self.data[bz2])):
-        NFFT=len(self.data[bz1]) #take all datapoints for the FFT 
-        print 'NFFT='+str(NFFT)
-      else:
-        print 'WARNING: length of '+bz1+' and '+bz2+'differ! Use len('+bz1+') for FFT'
+    if(len(self.data[bz1])==len(self.data[bz2])):
+      Ntot=len(self.data[bz1])#number of datapoints 
+      print 'number of datapoints='+str(len(self.data[bz1]))
+    else:
+      Ntot=min([len(self.data[bz1]),len(self.data[bz2])])#number of datapoints (min over bz1 and bz2) 
+      print 'WARNING: length of '+bz1+' and '+bz2+'differ! Use len('+bz1+') for FFT'
     p1=self.data[bz1]
     p2=self.data[bz2]
     pdiff=p1-p2
-    orbfft=2*_np.abs(spec.rfft_avg(pdiff,NFFT=NFFT,NAVG=NAVG,noverlap=noverlap))
+    orbfft=2*_np.abs(spec.rfft_avg(pdiff,NFFT=NFFT,NAVG=NAVG,window=window,noverlap=noverlap))
     #normalize to maximum signal
     orbfft=offset+20*_np.log10(orbfft/(orbfft.max()))
     #scale from data points to frequency [Hz]
     FFtscale=self.FsamADC/(NFFT-1)
     ff=_np.arange(NFFT/2+1)*FFtscale
-    _pl.plot(ff,orbfft,label=lbl)
+    _pl.plot(ff,orbfft,color=color,linestyle=linestyle,label=lbl)
     _pl.xlabel('f [Hz]')
     _pl.ylabel('dB')
     _pl.grid()
