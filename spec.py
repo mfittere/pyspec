@@ -28,23 +28,23 @@ def rfft_avg(x,NFFT=256,NAVG=None,window=None,noverlap=0):
     argument, it must take a data segment as an argument and
     return the windowed version of the segment.
   """
-  ff=NFFT
-  if(len(x)/NFFT<NAVG):
-    print 'WARNING: maximum number of averages:   %4.0f'%(len(x)/NFFT)
+  navgmax=(len(x)-NFFT)/(NFFT-noverlap)
+  if(navgmax<NAVG):
+    print 'WARNING: maximum number of averages:   %4.0f'%(navgmax)
     print '         number of averages requestes: %4.0f'%(NAVG)
-    print '         -> compute %4.0f avgerages'%(NAVG)
-    NAVG=len(x)/NFFT
+    print '         -> compute %4.0f avgerages'%(navgmax)
+    NAVG=navgmax
   if NAVG==None:
-    NAVG=len(x)/(NFFT)
+    NAVG=navgmax
     print 'NAVG= %4.0f'%(NAVG)
   lfft=[]
-  if(window==None):
+  if(window==None):#no window
     ww=_np.ones(NFFT)
-  elif(type(window)==_np.ndarray):
+  elif(type(window)==_np.ndarray):#self defined window given as array
     ww=window
-  else:
+  else:#window function
     ww=window(NFFT)
   for idx in range(NAVG):
-    lfft.append(_np.fft.rfft(x[idx*NFFT:(idx+1)*NFFT]*ww))
+    lfft.append(_np.fft.rfft(x[idx*(NFFT-noverlap):idx*(NFFT-noverlap)+NFFT]*ww))
   return _np.mean(_np.array(lfft),axis=0)
 
