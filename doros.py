@@ -67,7 +67,7 @@ class doros():
   #for BPMSW (d = 61) 15.25 mm
   PUgain=15250
   #ADC=Analog to Digital Converter parameters
-  FsamADC = (40*1.e6)/3564.0
+  FsamADC = (40*1.e6)/3564.0#sampling frequency
   Vref = 2.5
   FullScale = 2^24
   #Decoding parameters
@@ -153,8 +153,8 @@ class doros():
         cls.getdata(fn,force=force)
   def orb(self):
     """returns a dictionary with the orbit b1h,b1v,b2h,b2v in mum,
-    where the orbit is defined by the signlas by e.g.:
-    b1h=(b1h1-b1h2)/(b1h1+b1h2)"""
+    where the orbit is defined by the signals by:
+    b1h=(b1h1-b1h2)/(b1h1+b1h2) etc."""
     #number of valid frames per udp ADC1 buffer
     dic={}
     for bb in 'b1','b2':
@@ -176,8 +176,49 @@ class doros():
         ax[bb-1].set_xlabel('number of turns') 
         ax[bb-1].set_ylabel(r'z [$\mu$m]') 
         ax[bb-1].legend()
-  def fft(self,bb='b1h',NFFT=None,window=None,N0=0,offset=0):
-    """calculate the FFT spectrum in dB, where the amplitude is normalized
+  def psd(self,bb='b1h',NFFT=None,window=None,N0=0):
+    """calculate the PSD [m**2/Hz]. For correct normalisation
+    see CERN-THESIS-2013-028
+    window = window function
+    NFFT   = number of data points used for FFT
+    N0     = use data[N0:N0+NFFT]
+    """
+    xx=self.PUgain*(self.data[bb+'1']-self.data[bb+'2'])/(self.data[bb+'1']+self.data[bb+'2']) #orbit in mum
+    if(NFFT==None):
+      NFFT=len(xx)-N0
+    FFtscale=self.FsamADC/(NFFT-1)
+    ff=_np.arange(NFFT/2+1)*FFtscale
+    if window==None:
+      xx=xx[N0:N0+NFFT]
+    else:
+      xx=xx[N0:N0+NFFT]*window(NFFT)
+    psd=1/(self.FsamADC*NFFT**2)*_np.abs(_np.fft.rfft(xx))**2
+    return ff,psd
+  def _plot_opt_psd(self,xlog,ylog):
+    _pl.xlim(1,100)
+    _pl.xlabel(r'f [Hz]')
+    _pl.ylabel(r'PSD $\mathrm{\mu m}^2$/Hz')
+    _pl.grid(which='both')
+    if(xlog):
+      _pl.xscale('log')
+    if(ylog):
+      _pl.yscale('log')
+  def plot_psd(self,bb='b1h',NFFT=None,window=None,N0=0,offset=0,lbl='',color='b',linestyle='-',xlog=True,ylog=True):
+    """plot the PSD spectrum in m**2/Hz
+    window = window function
+    NFFT   = number of data points used for FFT
+    N0     = use data[N0:N0+NFFT]
+    offset = curve is shifted by offset in plot to distinguish lines
+             which would coincide
+    """
+    _pl.clf()
+    ff,psd=self.psd(bb=bb,NFFT=NFFT,window=window,N0=N0)
+    _pl.plot(ff[1:],offset+psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
+    self._plot_opt_psd(xlog,ylog)
+    return ff,psd 
+  def abs_fft_dB(self,bb='b1h',NFFT=None,window=None,N0=0,unit='dB'):
+    """calculate the amplitude of the FFT spectrum in dB, 
+    where the amplitude is normalized
     in respect of the maximum value:
     fft_1=2*abs(fft(b1h1-b1h2))
     fft=20*log10(fft_1/max(fft_1))
@@ -214,7 +255,7 @@ class doros():
     _pl.grid(which='both')
     if(log):
       _pl.xscale('log')
-  def plot_fft(self,bb='b1h',NFFT=None,window=None,N0=0,offset=0,lbl='',color='b',linestyle='-',log=True):
+  def plot_fft_dB(self,bb='b1h',NFFT=None,window=None,N0=0,offset=0,lbl='',color='b',linestyle='-',log=True):
     """plot the FFT spectrum in dB, where the amplitude is normalized
     in respect of the maximum value:
     fft_1=2*abs(fft(b1h1-b1h2))
@@ -225,10 +266,10 @@ class doros():
     offset = curve is shifted by offset in plot to distinguish lines
              which would coincide
     """
-    ff,orbfft=self.fft(bb=bb,NFFT=NFFT,window=window,N0=N0)
+    ff,orbfft=self.abs_fft_dB(bb=bb,NFFT=NFFT,window=window,N0=N0)
     _pl.plot(ff,offset+orbfft,color=color,linestyle=linestyle,label=lbl)
     self._plot_opt(log)
-  def plot_fft_avg(self,bb='b1h',NFFT=4096,NAVG=None,window=None,noverlap=0,offset=0,lbl='',color='b',linestyle='-',log=True):
+  def plot_fft_avg_dB(self,bb='b1h',NFFT=4096,NAVG=None,window=None,noverlap=0,offset=0,lbl='',color='b',linestyle='-',log=True):
     """plot the fft spectrum in dB, where the amplitude is normalized
     in respect of the maximum value:
     fft_1=2*abs(fft(b1h1-b1h2))
@@ -259,7 +300,7 @@ class doros():
     lfft=[]
     for aa in range(NAVG):
       print aa
-      ff,orbfft=self.fft(bb=bb,window=window,NFFT=NFFT,N0=aa*(NFFT-noverlap)+NFFT)
+      ff,orbfft=self.abs_fft_dB(bb=bb,window=window,NFFT=NFFT,N0=aa*(NFFT-noverlap)+NFFT)
       lfft.append({'f':ff,'orbfft':orbfft})
     print 'len(lfft)=%4.0f'%len(lfft)
     ff=_np.array(lfft[0]['f'])
@@ -267,7 +308,7 @@ class doros():
     orbfft_all_avg=_np.mean(orbfft_all,axis=0)
     _pl.plot(ff,offset+orbfft_all_avg,color=color,linestyle=linestyle,label=lbl)
     self._plot_opt(log)
-  def plot_fft_avg_2(self,bb='b1h',NFFT=4096,NAVG=None,window=None,noverlap=0,offset=0,lbl='',color='b',linestyle='-',log=True):
+  def plot_fft_avg_2_dB(self,bb='b1h',NFFT=4096,NAVG=None,window=None,noverlap=0,offset=0,lbl='',color='b',linestyle='-',log=True):
     """plot the fft spectrum in dB, where the amplitude is normalized
     in respect of the maximum value:
     fft_1=2*abs(fft(b1h1-b1h2))
