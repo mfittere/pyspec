@@ -208,7 +208,13 @@ class doros():
     FFtscale=self.FsamADC/(NFFT-1)
     ff=_np.arange(NFFT/2+1)*FFtscale
     return ff,orbfft
-  def plot_fft(self,bb='b1h',NFFT=None,window=None,N0=0,offset=0,lbl='',color='b',linestyle='-'):
+  def _plot_opt(self,log):
+    _pl.xlabel('f [Hz]')
+    _pl.ylabel('dB')
+    _pl.grid(which='both')
+    if(log):
+      _pl.xscale('log')
+  def plot_fft(self,bb='b1h',NFFT=None,window=None,N0=0,offset=0,lbl='',color='b',linestyle='-',log=True):
     """plot the FFT spectrum in dB, where the amplitude is normalized
     in respect of the maximum value:
     fft_1=2*abs(fft(b1h1-b1h2))
@@ -221,16 +227,54 @@ class doros():
     """
     ff,orbfft=self.fft(bb=bb,NFFT=NFFT,window=window,N0=N0)
     _pl.plot(ff,offset+orbfft,color=color,linestyle=linestyle,label=lbl)
-    _pl.xlabel('f [Hz]')
-    _pl.ylabel('dB')
-    _pl.grid()
-  def plot_fft_avg(self,bb='b1h',NFFT=4096,NAVG=None,window=None,noverlap=0,offset=0,lbl='',color='b',linestyle='-'):
+    self._plot_opt(log)
+  def plot_fft_avg(self,bb='b1h',NFFT=4096,NAVG=None,window=None,noverlap=0,offset=0,lbl='',color='b',linestyle='-',log=True):
     """plot the fft spectrum in dB, where the amplitude is normalized
     in respect of the maximum value:
     fft_1=2*abs(fft(b1h1-b1h2))
     fft=20*log10(fft_1/max(fft_1))
     The FFT is averaged over NAVG consecutive samples with NFFT
     points and *overlap* between the different FFTs.
+    !!!normalize spectra to dB, then average!!!
+    """
+    #calculate maximum number of data points
+    bz1=bb+'1'
+    bz2=bb+'2'
+    if(len(self.data[bz1])==len(self.data[bz2])):
+      Ntot=len(self.data[bz1])#number of datapoints
+      print 'number of datapoints='+str(len(self.data[bz1]))
+    else:
+      Ntot=min([len(self.data[bz1]),len(self.data[bz2])])#number of datapoints (min over bz1 and bz2)
+      print 'WARNING: length of '+bz1+' and '+bz2+'differ! Use len('+bz1+') for FFT'
+    #caluclate maximum number of averages
+    navgmax=(Ntot-NFFT)/(NFFT-noverlap)-2
+    if(navgmax<NAVG):
+      print 'WARNING: maximum number of averages:   %4.0f'%(navgmax)
+      print '         number of averages requestes: %4.0f'%(NAVG)
+      print '         -> compute %4.0f avgerages'%(navgmax)
+      NAVG=navgmax
+    if NAVG==None:
+      NAVG=navgmax
+      print 'NAVG= %4.0f'%(NAVG)
+    lfft=[]
+    for aa in range(NAVG):
+      print aa
+      ff,orbfft=self.fft(bb=bb,window=window,NFFT=NFFT,N0=aa*(NFFT-noverlap)+NFFT)
+      lfft.append({'f':ff,'orbfft':orbfft})
+    print 'len(lfft)=%4.0f'%len(lfft)
+    ff=_np.array(lfft[0]['f'])
+    orbfft_all=_np.array([ _np.array(lfft[aa]['orbfft']) for aa in range(NAVG)])
+    orbfft_all_avg=_np.mean(orbfft_all,axis=0)
+    _pl.plot(ff,offset+orbfft_all_avg,color=color,linestyle=linestyle,label=lbl)
+    self._plot_opt(log)
+  def plot_fft_avg_2(self,bb='b1h',NFFT=4096,NAVG=None,window=None,noverlap=0,offset=0,lbl='',color='b',linestyle='-',log=True):
+    """plot the fft spectrum in dB, where the amplitude is normalized
+    in respect of the maximum value:
+    fft_1=2*abs(fft(b1h1-b1h2))
+    fft=20*log10(fft_1/max(fft_1))
+    The FFT is averaged over NAVG consecutive samples with NFFT
+    points and *overlap* between the different FFTs.
+    !!!average over spectra, then normalize to dB!!!
     """
     bz1=bb+'1'
     bz2=bb+'2'
@@ -250,6 +294,4 @@ class doros():
     FFtscale=self.FsamADC/(NFFT-1)
     ff=_np.arange(NFFT/2+1)*FFtscale
     _pl.plot(ff,orbfft,color=color,linestyle=linestyle,label=lbl)
-    _pl.xlabel('f [Hz]')
-    _pl.ylabel('dB')
-    _pl.grid()
+    self._plot_opt(log)
