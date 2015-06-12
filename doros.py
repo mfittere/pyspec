@@ -5,6 +5,7 @@ import os
 import cPickle as pickle
 import glob as glob
 import spec as spec
+from scipy.signal import welch
 
 def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
   """read in the binary file with filename fn
@@ -176,105 +177,127 @@ class doros():
         ax[bb-1].set_xlabel('number of turns') 
         ax[bb-1].set_ylabel(r'z [$\mu$m]') 
         ax[bb-1].legend()
-  def psd(self,bb='b1h',NFFT=None,window=None,N0=0):
+  def psd(self,bb='b1h',nfft=None,window=_np.hanning,n0=0):
     """calculate the PSD [m**2/Hz]. For correct normalisation
     see CERN-THESIS-2013-028
     window = window function
-    NFFT   = number of data points used for FFT
-    N0     = use data[N0:N0+NFFT]
+    nfft   = number of data points used for FFT
+    n0     = use data[n0:n0+nfft]
     """
     xx=self.PUgain*(self.data[bb+'1']-self.data[bb+'2'])/(self.data[bb+'1']+self.data[bb+'2']) #orbit in mum
-    if(NFFT==None):
-      NFFT=len(xx)-N0
-    FFtscale=self.FsamADC/(NFFT-1)
-    ff=_np.arange(NFFT/2+1)*FFtscale
+    if(nfft==None):
+      nfft=len(xx)-n0
+    FFtscale=self.FsamADC/(nfft-1)
+    ff=_np.arange(nfft/2+1)*FFtscale
     if window==None:
-      xx=xx[N0:N0+NFFT]
+      xx=xx[n0:n0+nfft]
     else:
-      xx=xx[N0:N0+NFFT]*window(NFFT)
-    psd=1/(self.FsamADC*NFFT**2)*_np.abs(_np.fft.rfft(xx))**2
+      xx=xx[n0:n0+nfft]*window(nfft)
+    psd=1/(self.FsamADC*nfft**2)*_np.abs(_np.fft.rfft(xx))**2
     return ff,psd
-  def _plot_opt_psd(self,xlog,ylog):
+  def psd_welch(self,bb='b1h',n0=0,n1=None,window=_np.hanning,nperseg=4096,noverlap=None):
+    """calculate the PSD [m**2/Hz] using the Welche method.
+    For more information of input parameters see 
+    scipy.signal.welch.
+    For correct normalisation see CERN-THESIS-2013-028
+    n0     = use data[n0:n1]
+    """
+    xx=self.PUgain*(self.data[bb+'1']-self.data[bb+'2'])/(self.data[bb+'1']+self.data[bb+'2']) #orbit in mum
+    if(n1==None):
+      n1=len(xx)-n0
+    xx=xx[n0:n1]
+    ff,psd=welch(xx,fs=self.FsamADC,window=window(nperseg),nperseg=nperseg,noverlap=noverlap,nfft=None,detrend=False,return_onesided=True,scaling='density')
+    psd=1/(self.FsamADC)*psd#rescale PSD
+    return ff,psd
+  def plot_psd_welch(self,bb='b1h',n0=0,n1=None,window=_np.hanning,nperseg=4096,noverlap=None,offset=0,lbl='',color='b',linestyle='-',xlog=True,ylog=True):
+    """plot the PSD spectrum in m**2/Hz using the welch method
+    window = window function
+    n0     = use data[n0:n1]
+    offset = curve is shifted by offset in plot to distinguish lines
+             which would coincide
+    """
+    ff,psd=self.psd_welch(bb=bb,n0=n0,n1=n1,window=window,nperseg=nperseg,noverlap=noverlap)
+    _pl.plot(ff[1:],offset+psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
+    self._opt_plot_psd(xlog,ylog)
+  def _opt_plot_psd(self,xlog,ylog):
     _pl.xlim(1,100)
     _pl.xlabel(r'f [Hz]')
-    _pl.ylabel(r'PSD $\mathrm{\mu m}^2$/Hz')
+    _pl.ylabel(r'PSD [$\mathrm{\mu m}^2$/Hz]')
     _pl.grid(which='both')
     if(xlog):
       _pl.xscale('log')
     if(ylog):
       _pl.yscale('log')
-  def plot_psd(self,bb='b1h',NFFT=None,window=None,N0=0,offset=0,lbl='',color='b',linestyle='-',xlog=True,ylog=True):
+  def plot_psd(self,bb='b1h',nfft=None,window=None,n0=0,offset=0,lbl='',color='b',linestyle='-',xlog=True,ylog=True):
     """plot the PSD spectrum in m**2/Hz
     window = window function
-    NFFT   = number of data points used for FFT
-    N0     = use data[N0:N0+NFFT]
+    nfft   = number of data points used for FFT
+    n0     = use data[n0:n0+nfft]
     offset = curve is shifted by offset in plot to distinguish lines
              which would coincide
     """
-    _pl.clf()
-    ff,psd=self.psd(bb=bb,NFFT=NFFT,window=window,N0=N0)
+    ff,psd=self.psd(bb=bb,nfft=nfft,window=window,n0=n0)
     _pl.plot(ff[1:],offset+psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
-    self._plot_opt_psd(xlog,ylog)
-    return ff,psd 
-  def abs_fft_dB(self,bb='b1h',NFFT=None,window=None,N0=0,unit='dB'):
+    self._opt_plot_psd(xlog,ylog)
+  def abs_fft_dB(self,bb='b1h',nfft=None,window=None,n0=0,unit='dB'):
     """calculate the amplitude of the FFT spectrum in dB, 
     where the amplitude is normalized
     in respect of the maximum value:
     fft_1=2*abs(fft(b1h1-b1h2))
     fft=20*log10(fft_1/max(fft_1))
     window = window function
-    NFFT   = number of data points used for FFT
-    N0     = use data[N0:N0+NFFT]
+    nfft   = number of data points used for FFT
+    n0     = use data[n0:n0+nfft]
     """
     bz1=bb+'1'
     bz2=bb+'2'
-    if(NFFT==None):
+    if(nfft==None):
       if(len(self.data[bz1])==len(self.data[bz2])):
-        NFFT=len(self.data[bz1]) #take all datapoints for the FFT 
-        print 'NFFT='+str(NFFT)
+        nfft=len(self.data[bz1]) #take all datapoints for the FFT 
+        print 'nfft='+str(nfft)
       else:
         print 'WARNING: length of '+bz1+' and '+bz2+'differ! Use len('+bz1+') for FFT'
     if(window==None):
-      p1=self.data[bz1][N0:N0+NFFT]
-      p2=self.data[bz2][N0:N0+NFFT]
+      p1=self.data[bz1][n0:n0+nfft]
+      p2=self.data[bz2][n0:n0+nfft]
       pdiff=p1-p2
     else:
-      p1=self.data[bz1][N0:N0+NFFT]
-      p2=self.data[bz2][N0:N0+NFFT]
-      pdiff=window(NFFT)*(p1-p2)
+      p1=self.data[bz1][n0:n0+nfft]
+      p2=self.data[bz2][n0:n0+nfft]
+      pdiff=window(nfft)*(p1-p2)
     orbfft=2*_np.abs(_np.fft.rfft(pdiff))
     #normalize to maximum signal
     orbfft=20*_np.log10(orbfft/(orbfft.max()))
     #scale from data points to frequency [Hz]
-    FFtscale=self.FsamADC/(NFFT-1)
-    ff=_np.arange(NFFT/2+1)*FFtscale
+    FFtscale=self.FsamADC/(nfft-1)
+    ff=_np.arange(nfft/2+1)*FFtscale
     return ff,orbfft
-  def _plot_opt(self,log):
+  def _opt_plot(self,log):
     _pl.xlabel('f [Hz]')
     _pl.ylabel('dB')
     _pl.grid(which='both')
     if(log):
       _pl.xscale('log')
-  def plot_fft_dB(self,bb='b1h',NFFT=None,window=None,N0=0,offset=0,lbl='',color='b',linestyle='-',log=True):
+  def plot_fft_dB(self,bb='b1h',nfft=None,window=None,n0=0,offset=0,lbl='',color='b',linestyle='-',log=True):
     """plot the FFT spectrum in dB, where the amplitude is normalized
     in respect of the maximum value:
     fft_1=2*abs(fft(b1h1-b1h2))
     fft=20*log10(fft_1/max(fft_1))
     window = window function
-    NFFT   = number of data points used for FFT
-    N0     = use data[N0:N0+NFFT]
+    nfft   = number of data points used for FFT
+    n0     = use data[n0:n0+nfft]
     offset = curve is shifted by offset in plot to distinguish lines
              which would coincide
     """
-    ff,orbfft=self.abs_fft_dB(bb=bb,NFFT=NFFT,window=window,N0=N0)
+    ff,orbfft=self.abs_fft_dB(bb=bb,nfft=nfft,window=window,n0=n0)
     _pl.plot(ff,offset+orbfft,color=color,linestyle=linestyle,label=lbl)
-    self._plot_opt(log)
-  def plot_fft_avg_dB(self,bb='b1h',NFFT=4096,NAVG=None,window=None,noverlap=0,offset=0,lbl='',color='b',linestyle='-',log=True):
+    self._opt_plot(log)
+  def plot_fft_avg_dB(self,bb='b1h',nfft=4096,NAVG=None,window=None,noverlap=0,offset=0,lbl='',color='b',linestyle='-',log=True):
     """plot the fft spectrum in dB, where the amplitude is normalized
     in respect of the maximum value:
     fft_1=2*abs(fft(b1h1-b1h2))
     fft=20*log10(fft_1/max(fft_1))
-    The FFT is averaged over NAVG consecutive samples with NFFT
+    The FFT is averaged over NAVG consecutive samples with nfft
     points and *overlap* between the different FFTs.
     !!!normalize spectra to dB, then average!!!
     """
@@ -288,7 +311,7 @@ class doros():
       Ntot=min([len(self.data[bz1]),len(self.data[bz2])])#number of datapoints (min over bz1 and bz2)
       print 'WARNING: length of '+bz1+' and '+bz2+'differ! Use len('+bz1+') for FFT'
     #caluclate maximum number of averages
-    navgmax=(Ntot-NFFT)/(NFFT-noverlap)-2
+    navgmax=(Ntot-nfft)/(nfft-noverlap)-2
     if(navgmax<NAVG):
       print 'WARNING: maximum number of averages:   %4.0f'%(navgmax)
       print '         number of averages requestes: %4.0f'%(NAVG)
@@ -300,20 +323,20 @@ class doros():
     lfft=[]
     for aa in range(NAVG):
       print aa
-      ff,orbfft=self.abs_fft_dB(bb=bb,window=window,NFFT=NFFT,N0=aa*(NFFT-noverlap)+NFFT)
+      ff,orbfft=self.abs_fft_dB(bb=bb,window=window,nfft=nfft,n0=aa*(nfft-noverlap)+nfft)
       lfft.append({'f':ff,'orbfft':orbfft})
     print 'len(lfft)=%4.0f'%len(lfft)
     ff=_np.array(lfft[0]['f'])
     orbfft_all=_np.array([ _np.array(lfft[aa]['orbfft']) for aa in range(NAVG)])
     orbfft_all_avg=_np.mean(orbfft_all,axis=0)
     _pl.plot(ff,offset+orbfft_all_avg,color=color,linestyle=linestyle,label=lbl)
-    self._plot_opt(log)
-  def plot_fft_avg_2_dB(self,bb='b1h',NFFT=4096,NAVG=None,window=None,noverlap=0,offset=0,lbl='',color='b',linestyle='-',log=True):
+    self._opt_plot(log)
+  def plot_fft_avg_2_dB(self,bb='b1h',nfft=4096,NAVG=None,window=None,noverlap=0,offset=0,lbl='',color='b',linestyle='-',log=True):
     """plot the fft spectrum in dB, where the amplitude is normalized
     in respect of the maximum value:
     fft_1=2*abs(fft(b1h1-b1h2))
     fft=20*log10(fft_1/max(fft_1))
-    The FFT is averaged over NAVG consecutive samples with NFFT
+    The FFT is averaged over NAVG consecutive samples with nfft
     points and *overlap* between the different FFTs.
     !!!average over spectra, then normalize to dB!!!
     """
@@ -328,11 +351,11 @@ class doros():
     p1=self.data[bz1]
     p2=self.data[bz2]
     pdiff=p1-p2
-    orbfft=2*_np.abs(spec.rfft_avg(pdiff,NFFT=NFFT,NAVG=NAVG,window=window,noverlap=noverlap))
+    orbfft=2*_np.abs(spec.rfft_avg(pdiff,nfft=nfft,NAVG=NAVG,window=window,noverlap=noverlap))
     #normalize to maximum signal
     orbfft=offset+20*_np.log10(orbfft/(orbfft.max()))
     #scale from data points to frequency [Hz]
-    FFtscale=self.FsamADC/(NFFT-1)
-    ff=_np.arange(NFFT/2+1)*FFtscale
+    FFtscale=self.FsamADC/(nfft-1)
+    ff=_np.arange(nfft/2+1)*FFtscale
     _pl.plot(ff,orbfft,color=color,linestyle=linestyle,label=lbl)
-    self._plot_opt(log)
+    self._opt_plot(log)
