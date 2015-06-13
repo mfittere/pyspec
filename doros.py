@@ -21,9 +21,9 @@ def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
   # dataAll=_np.fromfile(file=fn,dtype=_np.uint8,count=-1,sep="") #get the full data
 #    adc=ADCb1Data.view('uint32')
   if(fn.split('IP')[1].split('_Data')[0]=='172_18_66_233'):
-    print '... read data from frontend 1'
+    print '... read data from frontend 1 (IR1 right)'
   if(fn.split('IP')[1].split('_Data')[0]=='172_18_66_234'):
-    print '... read data from frontend 2'
+    print '... read data from frontend 2 (IR1 left)'
   ff = open(fn,'rb')
   header = map(ord,ff.read(LheaderData))
   NumOfFileDumps   = header[0]+header[1]*2**8+header[2]*2**16+header[3]*2**24 #number of files dumped
@@ -209,7 +209,7 @@ class doros():
     ff,psd=welch(xx,fs=self.FsamADC,window=window(nperseg),nperseg=nperseg,noverlap=noverlap,nfft=None,detrend=False,return_onesided=True,scaling='density')
     psd=1/(self.FsamADC)*psd#rescale PSD
     return ff,psd
-  def plot_psd_welch(self,bb='b1h',n0=0,n1=None,window=_np.hanning,nperseg=4096,noverlap=None,offset=0,lbl='',color='b',linestyle='-',xlog=True,ylog=True):
+  def plot_psd_welch(self,bb='b1h',n0=0,n1=None,window=_np.hanning,nperseg=4096,noverlap=None,scale=1,lbl='',color='b',linestyle='-',xlog=True,ylog=True):
     """plot the PSD spectrum in m**2/Hz using the welch method
     window = window function
     n0     = use data[n0:n1]
@@ -217,18 +217,18 @@ class doros():
              which would coincide
     """
     ff,psd=self.psd_welch(bb=bb,n0=n0,n1=n1,window=window,nperseg=nperseg,noverlap=noverlap)
-    _pl.plot(ff[1:],offset+psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
-    self._opt_plot_psd(xlog,ylog)
-  def _opt_plot_psd(self,xlog,ylog):
+    _pl.plot(ff[1:],scale*psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
+    self.opt_plot_psd(xlog,ylog)
+  def opt_plot_psd(self,xlog,ylog):
     _pl.xlim(1,100)
-    _pl.xlabel(r'f [Hz]')
-    _pl.ylabel(r'PSD [$\mathrm{\mu m}^2$/Hz]')
+    _pl.xlabel(r'f [Hz]',fontsize=16)
+    _pl.ylabel(r'PSD [$\mathrm{\mu m}^2$/Hz]',fontsize=14)
     _pl.grid(which='both')
     if(xlog):
       _pl.xscale('log')
     if(ylog):
       _pl.yscale('log')
-  def plot_psd(self,bb='b1h',nfft=None,window=None,n0=0,offset=0,lbl='',color='b',linestyle='-',xlog=True,ylog=True):
+  def plot_psd(self,bb='b1h',nfft=None,window=None,n0=0,scale=1,lbl='',color='b',linestyle='-',xlog=True,ylog=True):
     """plot the PSD spectrum in m**2/Hz
     window = window function
     nfft   = number of data points used for FFT
@@ -237,8 +237,8 @@ class doros():
              which would coincide
     """
     ff,psd=self.psd(bb=bb,nfft=nfft,window=window,n0=n0)
-    _pl.plot(ff[1:],offset+psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
-    self._opt_plot_psd(xlog,ylog)
+    _pl.plot(ff[1:],scale*psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
+    self.opt_plot_psd(xlog,ylog)
   def abs_fft_dB(self,bb='b1h',nfft=None,window=None,n0=0,unit='dB'):
     """calculate the amplitude of the FFT spectrum in dB, 
     where the amplitude is normalized
@@ -272,7 +272,8 @@ class doros():
     FFtscale=self.FsamADC/(nfft-1)
     ff=_np.arange(nfft/2+1)*FFtscale
     return ff,orbfft
-  def _opt_plot(self,log):
+  def opt_plot(self,log):
+    _pl.xlim(0,100)
     _pl.xlabel('f [Hz]')
     _pl.ylabel('dB')
     _pl.grid(which='both')
@@ -291,4 +292,4 @@ class doros():
     """
     ff,orbfft=self.abs_fft_dB(bb=bb,nfft=nfft,window=window,n0=n0)
     _pl.plot(ff,offset+orbfft,color=color,linestyle=linestyle,label=lbl)
-    self._opt_plot(log)
+    self.opt_plot(log)
