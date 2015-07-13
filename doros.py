@@ -201,7 +201,6 @@ class doros():
       n1=len(xx)-n0
     xx=xx[n0:n1]
     ff,psd=welch(xx,fs=self.FsamADC,window=window(nperseg),nperseg=nperseg,noverlap=noverlap,nfft=None,detrend=False,return_onesided=True,scaling='density')
-    psd=1/(self.FsamADC)*psd#rescale PSD
     return ff,psd
   def plot_psd_welch(self,bb='b1h',n0=0,n1=None,window=_np.hanning,nperseg=4096,noverlap=None,scale=1,lbl='',color='b',linestyle='-',xlog=True,ylog=True):
     """plot the PSD spectrum in m**2/Hz using the welch method
