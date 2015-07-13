@@ -48,3 +48,24 @@ def rfft_avg(x,NFFT=256,NAVG=None,window=None,noverlap=0):
     lfft.append(_np.fft.rfft(x[idx*(NFFT-noverlap):idx*(NFFT-noverlap)+NFFT]*ww))
   return _np.mean(_np.array(lfft),axis=0)
 
+def psd(data,nfft=None,n0=0,window=_np.hanning,fs=11245.0):
+    """calculate the PSD [m**2/Hz]. For correct normalisation
+    see CERN-THESIS-2013-028 and scipy.signal.welch, which
+    normalizes by the window function:
+      psd=1/(fs*sum(win)**2)*abs(fft)**2
+    window = window function
+    nfft   = number of data points used for FFT
+    n0     = use data[n0:n0+nfft]
+    """
+    if(nfft==None):
+      nfft=len(data)-n0
+    ff=_np.arange(nfft/2+1)*fs/(nfft-1)
+    if window==None:
+      data=data[n0:n0+nfft]
+      scale=nfft**2
+    else:
+      win=window(nfft)
+      data=data[n0:n0+nfft]*win
+      scale=win.sum()**2
+    psd=1/(fs*scale)*_np.abs(_np.fft.rfft(data,n=nfft,axis=0))**2
+    return ff,psd
