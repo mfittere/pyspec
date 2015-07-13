@@ -177,30 +177,24 @@ class doros():
         ax[bb-1].set_xlabel('number of turns') 
         ax[bb-1].set_ylabel(r'z [$\mu$m]') 
         ax[bb-1].legend()
-  def psd(self,bb='b1h',nfft=None,window=_np.hanning,n0=0):
+  def psd(self,bb='b1h',nfft=None,n0=0,window=_np.hanning):
     """calculate the PSD [m**2/Hz]. For correct normalisation
-    see CERN-THESIS-2013-028
+    see CERN-THESIS-2013-028. This function calls spec.psd().
     window = window function
     nfft   = number of data points used for FFT
     n0     = use data[n0:n0+nfft]
+    for the psd the average value is subtracted from the data:
+      data=data-mean(data)
     """
     xx=self.PUgain*(self.data[bb+'1']-self.data[bb+'2'])/(self.data[bb+'1']+self.data[bb+'2']) #orbit in mum
-    if(nfft==None):
-      nfft=len(xx)-n0
-    FFtscale=self.FsamADC/(nfft-1)
-    ff=_np.arange(nfft/2+1)*FFtscale
-    if window==None:
-      xx=xx[n0:n0+nfft]
-    else:
-      xx=xx[n0:n0+nfft]*window(nfft)
-    psd=1/(self.FsamADC*nfft**2)*_np.abs(_np.fft.rfft(xx))**2
-    return ff,psd
+    xx=xx-_np.mean(xx)#substract average value from data
+    return spec.psd(data=xx,nfft=nfft,n0=n0,window=window,fs=self.FsamADC)
   def psd_welch(self,bb='b1h',n0=0,n1=None,window=_np.hanning,nperseg=4096,noverlap=None):
     """calculate the PSD [m**2/Hz] using the Welche method.
     For more information of input parameters see 
     scipy.signal.welch.
     For correct normalisation see CERN-THESIS-2013-028
-    n0     = use data[n0:n1]
+    n0,n1: use data[n0:n1]
     """
     xx=self.PUgain*(self.data[bb+'1']-self.data[bb+'2'])/(self.data[bb+'1']+self.data[bb+'2']) #orbit in mum
     if(n1==None):
@@ -228,7 +222,7 @@ class doros():
       _pl.xscale('log')
     if(ylog):
       _pl.yscale('log')
-  def plot_psd(self,bb='b1h',nfft=None,window=None,n0=0,scale=1,lbl='',color='b',linestyle='-',xlog=True,ylog=True):
+  def plot_psd(self,bb='b1h',nfft=None,n0=0,window=None,scale=1,lbl='',color='b',linestyle='-',xlog=True,ylog=True):
     """plot the PSD spectrum in m**2/Hz
     window = window function
     nfft   = number of data points used for FFT
