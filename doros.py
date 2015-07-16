@@ -1,11 +1,12 @@
 """class to import data from DOROS BPMs"""
 import numpy as _np
 import matplotlib.pyplot as _pl
-import os
+import os,time
 import cPickle as pickle
 import glob as glob
 import spec as spec
 from scipy.signal import welch
+import pyspecdate
 
 def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
   """read in the binary file with filename fn
@@ -89,17 +90,23 @@ class doros():
   #UDP per frame
   LdataUdp = nByte*nChan*nFramePerADCb*nADCBuff #number of bytes of UDP data
   Ludp = LheaderUdp + LdataUdp #UDP header + data length
-  def __init__(self,b1h1=[],b1h2=[],b1v1=[],b1v2=[],b2h1=[],b2h2=[],b2v1=[],b2v2=[]):
+  def __init__(self,b1h1=[],b1h2=[],b1v1=[],b1v2=[],b2h1=[],b2h2=[],b2v1=[],b2v2=[],mtime=None):
+    self.mtime=mtime
     self.data={'b1h1':_np.array(b1h1),'b1h2':_np.array(b1h2),'b1v1':_np.array(b1v1),'b1v2':_np.array(b1v2),'b2h1':_np.array(b2h1),'b2h2':_np.array(b2h2),'b2v1':_np.array(b2v1),'b2v2':_np.array(b2v2)}
   @classmethod
   def getdata(cls,fn,force=False):
+    """get the data from the binary file fn.bin and save it
+    it in a pickle file fn.p. Add timestamp from creation
+    time of binary file. If pickle file already exists, just
+    load the pickle file"""
     if(fn.split('.')[-1]=='bin'):
       fn=fn[0:-4]
     if(fn.split('.')[-1]=='p'):
       fn=fn[0:-2]
     if(os.path.isfile(fn+'.p') and force==False):
-      b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2=pickle.load(open(fn+'.p',"rb"))
+      b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime=pickle.load(open(fn+'.p',"rb"))
     else:
+      mtime=os.path.getmtime(fn+'.bin')#ctime gives back the timestamp when the file was created for MAC, instead use mtime, which seems to give back the correct timestamp
       data,udpcheck=readbinary(fn+'.bin',cls.LheaderData,cls.LheaderUdp,cls.LdataUdp)
       if(udpcheck):#only process data if udp check passed
         ADC1chanTable=decode_chan(data,cls.ADCb1nFrameAddr,cls.nADCchan,cls.nByte,cls.LADCbBuff,cls.nChan,cls.SampleDecimation,beam='b1')
@@ -108,11 +115,12 @@ class doros():
         [b1h1,b1h2,b1v1,b1v2]=ADC1chanTable[0:4]/(2**24-1)
         [b2h1,b2h2,b2v1,b2v2]=ADC2chanTable[0:4]/(2**24-1)
         #store already processed orbit data in *.p
-        pickle.dump([b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2],open(fn+'.p',"wb"))  
+        pickle.dump([b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime],open(fn+'.p',"wb"))  
         print '... store b1h1,b1h2,b2h1,b2h2 etc. in file %s.p for faster reload'%(fn.split('/')[-1])
       else:
+        mtime=0
         [b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2]=[[] for x in range(8)]
-    return cls(b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2)
+    return cls(b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime)
   def acqutime(self,frev=11245.0):
     """returns the acquisition time in s assuming a revolution frequency of frev"""
     ll=len(self.data['b1h1'])
@@ -152,6 +160,8 @@ class doros():
       else:
         print 'processing '+fn
         cls.getdata(fn,force=force)
+  def dumpdate(self,fmt='%Y-%m-%d %H:%M:%S.SSS'):
+    return pyspecdate.dumpdate(self.mtime,fmt=fmt) 
   def orb(self):
     """returns a dictionary with the orbit b1h,b1v,b2h,b2v in mum,
     where the orbit is defined by the signals by:
