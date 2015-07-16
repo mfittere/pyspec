@@ -6,7 +6,7 @@ import cPickle as pickle
 import glob as glob
 import spec as spec
 from scipy.signal import welch
-import pyspecdate
+import localdate
 
 def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
   """read in the binary file with filename fn
@@ -161,7 +161,7 @@ class doros():
         print 'processing '+fn
         cls.getdata(fn,force=force)
   def dumpdate(self,fmt='%Y-%m-%d %H:%M:%S.SSS'):
-    return pyspecdate.dumpdate(self.mtime,fmt=fmt) 
+    return localdate.dumpdate(self.mtime,fmt=fmt) 
   def orb(self):
     """returns a dictionary with the orbit b1h,b1v,b2h,b2v in mum,
     where the orbit is defined by the signals by:
