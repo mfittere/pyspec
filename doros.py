@@ -22,9 +22,11 @@ def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
   # dataAll=_np.fromfile(file=fn,dtype=_np.uint8,count=-1,sep="") #get the full data
 #    adc=ADCb1Data.view('uint32')
   if(fn.split('IP')[1].split('_Data')[0]=='172_18_66_233'):
-    print '... read data from frontend 1 (IR1 right)'
+    ip='1'
+    print '... read data from frontend 1 (IR%s right)'%ip
   if(fn.split('IP')[1].split('_Data')[0]=='172_18_66_234'):
-    print '... read data from frontend 2 (IR1 left)'
+    ip='1'
+    print '... read data from frontend 2 (IR%s left)'%ip
   ff = open(fn,'rb')
   header = map(ord,ff.read(LheaderData))
   NumOfFileDumps   = header[0]+header[1]*2**8+header[2]*2**16+header[3]*2**24 #number of files dumped
@@ -45,7 +47,7 @@ def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
 #    nUdp = NumOfUDPsPerDump*NumOfFileDumps
 #    data['header']=data[LheaderData+Ludp:LheaderData + Ludp*(nUdp-1) +LheaderUdp:Ludp]
 #  return data[0:TotalLenOfFile],udpcheck
-  return data,udpcheck
+  return data,udpcheck,ip
 
 def decode_chan(data,ADCbnFrameAddr,nADCchan,nByte,LADCbBuff,nChan,SampleDecimation,beam='b1'):
   #extract ADCb[12] buffer
@@ -60,8 +62,34 @@ def decode_chan(data,ADCbnFrameAddr,nADCchan,nByte,LADCbBuff,nChan,SampleDecimat
   ADCchanTable = _np.array([ ADCbdataDec[idx:idx+nTotalADCbBuffDataFrames*nChan:SampleDecimation*nChan] for idx in range(nChan) ])
   return ADCchanTable
 
+def getbeta(dn,force=False):
+  files=glob.glob(dn+'/*.bin')
+  if(os.path.isfile(dn+'/betastar.p') and force==False):
+    beta = pickle.load(open(dn+'/betastar.p',"rb"))
+    print '%s found!'%(dn+'/betastar.p')
+  else:
+    #all files start at 1 = earliest timestamp
+    fnmin  = glob.glob(dn+'/_1.bin')
+    #get the largest file number = latest timestamp
+    idxmax = str(max([ int(((fn.split('.')[0]).split('_'))[-1]) for fn in files ]))
+    fnmax  = glob.glob(dn+'/_'+idxmax+'.bin')
+    start = doros.getdata(fnmin).dumpdate()
+    end   = doros.getdata(fnmax).dumpdate()
+    try:
+      beta  = measdb.get(['HX:BETASTAR_IP1','HX:BETASTAR_IP2','HX:BETASTAR_IP5','HX:BETASTAR_IP8'],start,end)
+      pickle.dump(data,open(dn+'/betastar.p',"wb"))
+    except IOError:
+      print 'ERROR: measurement database can not be accessed!'
+      beta=None
+  return beta
+
+def argmtime(t=[0],t0=0):
+  """get the index with the closest timestamp to *t0*"""
+  return _np.argmin(_np.abs(t - t0))
+
 class doros():
   """class to import data from DOROS BPMS"""
+  sIP=21.475 #distance from IP [m]
   #---- define parameters used for import the datafile ----
   ImSize = 1000
   #pick - up slope in um, theory is 1/4 of the electrode distance [d],
@@ -90,50 +118,51 @@ class doros():
   #UDP per frame
   LdataUdp = nByte*nChan*nFramePerADCb*nADCBuff #number of bytes of UDP data
   Ludp = LheaderUdp + LdataUdp #UDP header + data length
-  def __init__(self,b1h1=[],b1h2=[],b1v1=[],b1v2=[],b2h1=[],b2h2=[],b2v1=[],b2v2=[],mtime=None):
-    self.mtime=mtime
-    self.data={'b1h1':_np.array(b1h1),'b1h2':_np.array(b1h2),'b1v1':_np.array(b1v1),'b1v2':_np.array(b1v2),'b2h1':_np.array(b2h1),'b2h2':_np.array(b2h2),'b2v1':_np.array(b2v1),'b2v2':_np.array(b2v2)}
+  def __init__(self,b1h1=[],b1h2=[],b1v1=[],b1v2=[],b2h1=[],b2h2=[],b2v1=[],b2v2=[],mtime=None,beta=None,ip='1'):
+    self.ip    = ip
+    self.beta  = beta 
+    self.mtime = mtime
+    self.data  = {'b1h1':_np.array(b1h1),'b1h2':_np.array(b1h2),'b1v1':_np.array(b1v1),'b1v2':_np.array(b1v2),'b2h1':_np.array(b2h1),'b2h2':_np.array(b2h2),'b2v1':_np.array(b2v1),'b2v2':_np.array(b2v2)}
   @classmethod
-  def getdata(cls,fn,force=False):
+  def getdata(cls,fn,beta=None,force=False):
     """get the data from the binary file fn.bin and save it
     it in a pickle file fn.p. Add timestamp from creation
     time of binary file. If pickle file already exists, just
-    load the pickle file"""
+    load the pickle file.
+    beta is the beta* extracted from timber. read in file
+    with beta=pickle.load(open(fnbeta,"rb"))"""
     if(fn.split('.')[-1]=='bin'):
       fn=fn[0:-4]
     if(fn.split('.')[-1]=='p'):
       fn=fn[0:-2]
     if(os.path.isfile(fn+'.p') and force==False):
-      b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime=pickle.load(open(fn+'.p',"rb"))
+      b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime,betasample,ip=pickle.load(open(fn+'.p',"rb"))
     else:
       mtime=os.path.getmtime(fn+'.bin')#ctime gives back the timestamp when the file was created for MAC, instead use mtime, which seems to give back the correct timestamp
-      data,udpcheck=readbinary(fn+'.bin',cls.LheaderData,cls.LheaderUdp,cls.LdataUdp)
+      data,udpcheck,ip=readbinary(fn+'.bin',cls.LheaderData,cls.LheaderUdp,cls.LdataUdp)
       if(udpcheck):#only process data if udp check passed
         ADC1chanTable=decode_chan(data,cls.ADCb1nFrameAddr,cls.nADCchan,cls.nByte,cls.LADCbBuff,cls.nChan,cls.SampleDecimation,beam='b1')
         ADC2chanTable=decode_chan(data,cls.ADCb2nFrameAddr,cls.nADCchan,cls.nByte,cls.LADCbBuff,cls.nChan,cls.SampleDecimation,beam='b2')
         #number of valid frames per udp ADC1 buffer
         [b1h1,b1h2,b1v1,b1v2]=ADC1chanTable[0:4]/(2**24-1)
         [b2h1,b2h2,b2v1,b2v2]=ADC2chanTable[0:4]/(2**24-1)
+        betasample={}
+        if beta == None:
+          for ii in ['1','2','5','8']: 
+            betasample['betaIP'+ii] = 0.0
+        else:
+          for ii in ['1','2','5','8']: 
+            idxaux = argmtime(beta.data['HX:BETASTAR_IP'+ii][0],t0=mtime) 
+            betasample['betaIP'+ii] = beta.data['HX:BETASTAR_IP'+ii][1][idxaux]
         #store already processed orbit data in *.p
-        pickle.dump([b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime],open(fn+'.p',"wb"))  
+        pickle.dump([b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime,betasample,ip],open(fn+'.p',"wb"))  
         print '... store b1h1,b1h2,b2h1,b2h2 etc. in file %s.p for faster reload'%(fn.split('/')[-1])
       else:
+        ip = '1'
+        betasample = None
         mtime=0
         [b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2]=[[] for x in range(8)]
-    return cls(b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime)
-  def acqutime(self,frev=11245.0):
-    """returns the acquisition time in s assuming a revolution frequency of frev"""
-    ll=len(self.data['b1h1'])
-    lflag=True
-    for bb in 'b1','b2':
-      for pp in 'h1','v1','h2','v2':
-        if((len(self.data[bb+pp])-ll)>1.e-3):
-          lflag=False
-          print '%s: data acquisition of %4.0f samples over %4.2f seconds'%(bb+pp,len(self.data[bb+pp]),len(self.data[bb+pp])/frev)
-    if(lflag):
-      print 'data acquisition over of %4.0f samples over %4.2f seconds'%(ll,ll/frev)
-    else:
-      print 'WARNING: not all b[12][hv][12] arrays have the same length!' 
+    return cls(b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime,betasample,ip)
   def checkdata(self,fn):
     """check for errors in data acquisition"""
     LeAll = os.path.getsize(fn)#total file byte length
@@ -154,94 +183,141 @@ class doros():
   def process_dir(cls,dn,force=False):
     """process orbit data in directory dn and
     store it in *.p files"""
-    for fn in glob.glob(dn+'/*.bin'):
+    files = glob.glob(dn+'/*.bin')
+    beta  = getbeta(dn,force=False) #rdmstore object with beta* values
+    for fn in files:
       if(os.path.isfile(fn[0:-4]+'.p') and force==False):
         print fn+' is already processed'
       else:
         print 'processing '+fn
-        cls.getdata(fn,force=force)
+        cls.getdata(fn,beta=beta,force=force)
+  def acqutime(self):
+    """returns the acquisition time in s assuming a revolution frequency of doros.fsamADC"""
+    ll=len(self.data['b1h1'])
+    lflag=True
+    for bb in 'b1','b2':
+      for pp in 'h1','v1','h2','v2':
+        if((len(self.data[bb+pp])-ll)>1.e-3):
+          lflag=False
+          print '%s: data acquisition of %4.0f samples over %4.2f seconds'%(bb+pp,len(self.data[bb+pp]),len(self.data[bb+pp])/self.FsamADC)
+    if(lflag):
+      print 'data acquisition over of %4.0f samples over %4.2f seconds'%(ll,ll/self.FsamADC)
+    else:
+      print 'WARNING: not all b[12][hv][12] arrays have the same length!' 
+    return ll,ll/self.FsamADC
   def dumpdate(self,fmt='%Y-%m-%d %H:%M:%S.SSS'):
     return localdate.dumpdate(self.mtime,fmt=fmt) 
+  def betabpm(self):
+    """return beta at DOROS BPMs for beta*=beta
+    beta_doros=beta+s**2/beta
+    as only a drift space is between the IP and
+    the DOROS BPMs"""
+    #self.beta['betaIP'+ip]=0 if no value is saved
+    if abs(self.beta['betaIP'+self.ip]) > 1.e-8:
+      return self.beta['betaIP'+self.ip]+self.sIP**2/self.beta['betaIP'+self.ip] 
+    else:
+      return 1.0 #return 1.0, so that psd normalization is not influenced
   def orb(self):
     """returns a dictionary with the orbit b1h,b1v,b2h,b2v in mum,
-    where the orbit is defined by the signals by:
-    b1h=(b1h1-b1h2)/(b1h1+b1h2) etc."""
-    #number of valid frames per udp ADC1 buffer
+    where the orbit is defined over the signals of the two electrodes:
+    b1haux=PUgain*(b1h1-b1h2)/(b1h1+b1h2)
+    b1h=b1haux/mean(b1haux) etc."""
     dic={}
     for bb in 'b1','b2':
       for pp in 'h','v':
-        dic[bb+pp]=(self.data[bb+pp+'1']-self.data[bb+pp+'2'])/(self.data[bb+pp+'1']+self.data[bb+pp+'2'])
+        dic[bb+pp]=self.PUgain*(self.data[bb+pp+'1']-self.data[bb+pp+'2'])/(self.data[bb+pp+'1']+self.data[bb+pp+'2'])
+        #subtract average orbit
+        dic[bb+pp]=dic[bb+pp]-_np.mean(dic[bb+pp])
     return dic
-  def plot_orb(self,refidx=None):
-    """plot orbit position change in mum
-    if refidx=None: plot e.g. data['b1h']
-    if refidx=7: plot e.g. data['b1h']-data['b1h'][7]
-    """
-    f,ax=_pl.subplots(2)
-    for bb in [1,2]:
-      for pp in 'h','v':
-        if(refidx==None):
-          ax[bb-1].plot(self.PUgain*self.orb()['b'+str(bb)+pp],label=('b'+str(bb)+pp).upper()) 
-        else:
-          ax[bb-1].plot(self.PUgain*(self.orb()['b'+str(bb)+pp]-self.orb()['b'+str(bb)+pp][refidx]),label=('b'+str(bb)+pp).upper())
-        ax[bb-1].set_xlabel('number of turns') 
-        ax[bb-1].set_ylabel(r'z [$\mu$m]') 
-        ax[bb-1].legend()
-  def psd(self,bb='b1h',nfft=None,n0=0,window=_np.hanning):
-    """calculate the PSD [m**2/Hz]. For correct normalisation
+  def psd(self,bb='b1h',nfft=None,n0=0,window=_np.hanning,scale=1.0):
+    """calculate the PSD [mum**2/Hz]. For correct normalisation
     see CERN-THESIS-2013-028. This function calls spec.psd().
     window = window function
     nfft   = number of data points used for FFT
     n0     = use data[n0:n0+nfft]
-    for the psd the average value is subtracted from the data:
-      data=data-mean(data)
+    scale  = scale orbit by *scale*, e.g. 1/self.betabpm()
     """
-    xx=self.PUgain*(self.data[bb+'1']-self.data[bb+'2'])/(self.data[bb+'1']+self.data[bb+'2']) #orbit in mum
-    xx=xx-_np.mean(xx)#substract average value from data
+    xx=scale*self.orb()[bb]
     return spec.psd(data=xx,nfft=nfft,n0=n0,window=window,fs=self.FsamADC)
-  def psd_welch(self,bb='b1h',n0=0,n1=None,window=_np.hanning,nperseg=4096,noverlap=None):
-    """calculate the PSD [m**2/Hz] using the Welche method.
+  def psd_welch(self,bb='b1h',n0=0,n1=None,window=_np.hanning,nperseg=4096,noverlap=None,scale=1.0):
+    """calculate the PSD [mum**2/Hz] using the Welche method.
     For more information of input parameters see 
     scipy.signal.welch.
     For correct normalisation see CERN-THESIS-2013-028
     n0,n1: use data[n0:n1]
     """
-    xx=self.PUgain*(self.data[bb+'1']-self.data[bb+'2'])/(self.data[bb+'1']+self.data[bb+'2']) #orbit in mum
+    xx=scale*self.orb()[bb]
     if(n1==None):
       n1=len(xx)-n0
     xx=xx[n0:n1]
     ff,psd=welch(xx,fs=self.FsamADC,window=window(nperseg),nperseg=nperseg,noverlap=noverlap,nfft=None,detrend=False,return_onesided=True,scaling='density')
     return ff,psd
-  def plot_psd_welch(self,bb='b1h',n0=0,n1=None,window=_np.hanning,nperseg=4096,noverlap=None,scale=1,lbl='',color='b',linestyle='-',xlog=True,ylog=True):
-    """plot the PSD spectrum in m**2/Hz using the welch method
+  def plot_psd(self,bb='b1h',nfft=None,window=None,n0=0,scale=1.0,lbl='',color='b',linestyle='-',xlog=True,ylog=True):
+    """plot the PSD spectrum in mum**2/Hz
+    window = window function
+    nfft   = number of data points used for FFT
+    n0     = use data[n0:n0+nfft]
+    scale  = scale input data by *scale*
+    """
+    ff,psd=self.psd(bb=bb,nfft=nfft,window=window,n0=n0,scale=scale)
+    _pl.plot(ff[1:],psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
+    self.opt_plot_psd(xlog,ylog)
+  def plot_orb_psd(self,bb='b1h',nfft=None,window=None,n0=0,scale=1.0,lbl=None,color='b',linestyle='-'):
+    """plot the orbit [mum] and PSD spectrum in mum**2/Hz
+    window = window function
+    nfft   = number of data points used for FFT
+    n0     = use data[n0:n0+nfft]
+    scale  = scale input data by *scale*
+    """
+    if lbl == None:
+      lbl=bb.upper()
+    xx     = self.orb()[bb]
+    ff,psd = self.psd(bb=bb,nfft=nfft,window=window,n0=n0,scale=scale)
+    _pl.clf()
+    _pl.subplot(211)
+    _pl.plot(xx,label=lbl)
+    self.opt_plot_orb(ylim=(-30,30)) 
+    _pl.legend(loc='lower left')
+    _pl.subplot(212)
+    _pl.plot(ff[1:],psd[1:],color=color,linestyle=linestyle,label='%s, scale=%4.2f'%(lbl,scale))#do not plot DC offset
+    self.opt_plot_psd(True,True)
+    _pl.legend(loc='lower left')
+    _pl.ylim(1.e-16,1.e-7)
+  def plot_orb_all(self):
+    """plot orbit position change in mum"""
+    _pl.clf()
+    for bb in [1,2]:
+      for pp in 'h','v':
+        _pl.subplot(int(210+bb))
+        _pl.plot(self.orb()['b'+str(bb)+pp],label=('b'+str(bb)+pp).upper()) 
+        self.opt_plot_orb()
+    _pl.legend()
+  def plot_psd_welch(self,bb='b1h',n0=0,n1=None,window=_np.hanning,nperseg=4096,noverlap=None,scale=1.0,lbl='',color='b',linestyle='-',xlog=True,ylog=True):
+    """plot the PSD spectrum in mum**2/Hz using the welch method
     window = window function (default: hanning)
     n0     = use data[n0:n1]
     offset = curve is shifted by offset in plot to distinguish lines
              which would coincide
+    scale  = scale input data by *scale*
     """
-    ff,psd=self.psd_welch(bb=bb,n0=n0,n1=n1,window=window,nperseg=nperseg,noverlap=noverlap)
-    _pl.plot(ff[1:],scale*psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
+    ff,psd=self.psd_welch(bb=bb,n0=n0,n1=n1,window=window,nperseg=nperseg,noverlap=noverlap,scale=scale)
+    _pl.plot(ff[1:],psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
     self.opt_plot_psd(xlog,ylog)
+  def opt_plot_orb(self,ylim=(-80,80)):
+    _pl.ylim(ylim)
+    _pl.grid(which='both')
+    _pl.xlabel('number of turns') 
+    _pl.ylabel(r'z [$\mu$m]') 
   def opt_plot_psd(self,xlog,ylog):
     _pl.xlim(1,100)
     _pl.xlabel(r'f [Hz]',fontsize=16)
     _pl.ylabel(r'PSD [$\mathrm{\mu m}^2$/Hz]',fontsize=14)
     _pl.grid(which='both')
+    _pl.title(r'$\beta_{IP%s}*=%s $m '%(self.ip,self.beta['betaIP'+self.ip]))
     if(xlog):
       _pl.xscale('log')
     if(ylog):
       _pl.yscale('log')
-  def plot_psd(self,bb='b1h',nfft=None,window=None,n0=0,scale=1,lbl='',color='b',linestyle='-',xlog=True,ylog=True):
-    """plot the PSD spectrum in m**2/Hz
-    window = window function
-    nfft   = number of data points used for FFT
-    n0     = use data[n0:n0+nfft]
-    offset = curve is shifted by offset in plot to distinguish lines
-             which would coincide
-    """
-    ff,psd=self.psd(bb=bb,nfft=nfft,window=window,n0=n0)
-    _pl.plot(ff[1:],scale*psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
-    self.opt_plot_psd(xlog,ylog)
   def abs_fft_dB(self,bb='b1h',nfft=None,window=None,n0=0,unit='dB'):
     """calculate the amplitude of the FFT spectrum in dB, 
     where the amplitude is normalized
