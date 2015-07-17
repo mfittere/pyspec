@@ -6,7 +6,7 @@ import spec as spec
 #import os
 #import cPickle as pickle
 #import glob as glob
-#from scipy.signal import welch
+from scipy.signal import welch
 
 def get_fn_data(fn):
   """get time stamp, plane and bunch number
@@ -29,14 +29,14 @@ def get_fn_data(fn):
 
 class adt():
   """class to import data from ADT"""
-  def __init__(self,idxbunch,timestamp,pos,plane,fs=11245.0,betastar=0,dd=[]):
+  def __init__(self,idxbunch,timestamp,pos,plane,data=[],fs=11245.0,betastar=0):
     self.idxbunch  = idxbunch
     self.timestamp = timestamp
     self.pos       = pos
     self.plane     = plane
     self.fs        = fs
     self.betastar  = betastar
-    self.data={plane:_np.array(dd)}
+    self.data={plane:_np.array(data)}
   @classmethod
   def getdata(cls,fn):
     idxbunch,timestamp,pos,plane = get_fn_data(fn)
@@ -48,7 +48,7 @@ class adt():
     see CERN-THESIS-2013-028
     window = window function
     nfft   = number of data points used for FFT
-    n0     = use data[n0:n0+nfft]
+    n0,n1     = use data[n0:n0+nfft]
     for the psd the average value is subtracted from the data:
       data=data-mean(data)
     """
@@ -63,7 +63,7 @@ class adt():
     n0,n1     = use data[n0:n1]
     """
     xx=self.data[self.plane]
-    xx=xx-mean(xx)
+    xx=xx-_np.mean(xx)
     if(n1==None):
       n1=len(xx)-n0
     xx=xx[n0:n1]
@@ -93,13 +93,15 @@ class adt():
     self.opt_plot_psd(xlog,ylog)
   def plot_psd_welch(self,n0=0,n1=None,window=_np.hanning,nperseg=4096,noverlap=None,scale=1,lbl=None,color='b',linestyle='-',xlog=True,ylog=True):
     """plot the PSD spectrum in m**2/Hz using the welch method
-    window = window function (default: hanning)
-    n0     = use data[n0:n1]
-    offset = curve is shifted by offset in plot to distinguish lines
-             which would coincide
+    window: window function (default: hanning)
+    n0,n1    : use data[n0:n1]
+    nperseg : int, optional
+    Length of each segment.  Defaults to 4096.
+    noverlap: int, optional
+    Number of points to overlap between segments. If None,
     """
     if lbl==None:
       lbl='%s %s'%(self.pos,self.plane)
-    ff,psd=self.psd_welch(bb=bb,n0=n0,n1=n1,window=window,nperseg=nperseg,noverlap=noverlap)
+    ff,psd=self.psd_welch(n0=n0,n1=n1,window=window,nperseg=nperseg,noverlap=noverlap)
     _pl.plot(ff[1:],scale*psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
     self.opt_plot_psd(xlog,ylog)
