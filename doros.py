@@ -83,10 +83,6 @@ def getbeta(dn,force=False):
       beta=None
   return beta
 
-def argmtime(t=[0],t0=0):
-  """get the index with the closest timestamp to *t0*"""
-  return _np.argmin(_np.abs(t - t0))
-
 class doros():
   """class to import data from DOROS BPMS"""
   sIP=21.475 #distance from IP [m]
@@ -152,7 +148,7 @@ class doros():
             betasample['betaIP'+ii] = 0.0
         else:
           for ii in ['1','2','5','8']: 
-            idxaux = argmtime(beta.data['HX:BETASTAR_IP'+ii][0],t0=mtime) 
+            idxaux = localdate.argmtime(beta.data['HX:BETASTAR_IP'+ii][0],t0=mtime) 
             betasample['betaIP'+ii] = beta.data['HX:BETASTAR_IP'+ii][1][idxaux]
         #store already processed orbit data in *.p
         pickle.dump([b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime,betasample,ip],open(fn+'.p',"wb"))  
