@@ -6,6 +6,9 @@ import cPickle as pickle
 import glob as glob
 import spec as spec
 from scipy.signal import welch
+from rdmstores import *
+import sys
+sys.path.append('/Users/mfittere/lib/python/pyspec')
 import localdate
 
 def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
@@ -26,6 +29,12 @@ def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
     print '... read data from frontend 1 (IR%s right)'%ip
   if(fn.split('IP')[1].split('_Data')[0]=='172_18_66_234'):
     ip='1'
+    print '... read data from frontend 2 (IR%s left)'%ip
+  if(fn.split('IP')[1].split('_Data')[0]=='172_18_41_214'):
+    ip='5'
+    print '... read data from frontend 1 (IR%s right)'%ip
+  if(fn.split('IP')[1].split('_Data')[0]=='172_18_53_135'):
+    ip='5'
     print '... read data from frontend 2 (IR%s left)'%ip
   ff = open(fn,'rb')
   header = map(ord,ff.read(LheaderData))
@@ -64,20 +73,23 @@ def decode_chan(data,ADCbnFrameAddr,nADCchan,nByte,LADCbBuff,nChan,SampleDecimat
 
 def getbeta(dn,force=False):
   files=glob.glob(dn+'/*.bin')
-  if(os.path.isfile(dn+'/betastar.p') and force==False):
+  if( force==False and os.path.isfile(dn+'/betastar.p')):
     beta = pickle.load(open(dn+'/betastar.p',"rb"))
     print '%s found!'%(dn+'/betastar.p')
   else:
     #all files start at 1 = earliest timestamp
-    fnmin  = glob.glob(dn+'/_1.bin')
+    fnmin  = (glob.glob(dn+'/*_1.bin'))[0]
     #get the largest file number = latest timestamp
     idxmax = str(max([ int(((fn.split('.')[0]).split('_'))[-1]) for fn in files ]))
-    fnmax  = glob.glob(dn+'/_'+idxmax+'.bin')
-    start = doros.getdata(fnmin).dumpdate()
-    end   = doros.getdata(fnmax).dumpdate()
+    fnmax  = (glob.glob(dn+'/*_'+idxmax+'.bin'))[-1]
+    #add 10 min at beginning and end`
+    start = localdate.dumpdate(localdate.addtimedelta(os.path.getmtime(fnmin),-60*10))
+    end   = localdate.dumpdate(localdate.addtimedelta(os.path.getmtime(fnmax),60*10) )
+#    start = doros.getdata(fnmin).dumpdate()
+#    end   = doros.getdata(fnmax).dumpdate()
     try:
       beta  = measdb.get(['HX:BETASTAR_IP1','HX:BETASTAR_IP2','HX:BETASTAR_IP5','HX:BETASTAR_IP8'],start,end)
-      pickle.dump(data,open(dn+'/betastar.p',"wb"))
+      pickle.dump(beta,open(dn+'/betastar.p',"wb"))
     except IOError:
       print 'ERROR: measurement database can not be accessed!'
       beta=None
@@ -147,7 +159,7 @@ class doros():
           for ii in ['1','2','5','8']: 
             betasample['betaIP'+ii] = 0.0
         else:
-          for ii in ['1','2','5','8']: 
+          for ii in ['1','2','5','8']:
             idxaux = localdate.argmtime(beta.data['HX:BETASTAR_IP'+ii][0],t0=mtime) 
             betasample['betaIP'+ii] = beta.data['HX:BETASTAR_IP'+ii][1][idxaux]
         #store already processed orbit data in *.p
@@ -180,7 +192,7 @@ class doros():
     """process orbit data in directory dn and
     store it in *.p files"""
     files = glob.glob(dn+'/*.bin')
-    beta  = getbeta(dn,force=False) #rdmstore object with beta* values
+    beta  = getbeta(dn,force=True) #rdmstore object with beta* values
     for fn in files:
       if(os.path.isfile(fn[0:-4]+'.p') and force==False):
         print fn+' is already processed'
