@@ -270,6 +270,27 @@ class doros():
     ff,psd=self.psd(bb=bb,nfft=nfft,window=window,n0=n0,scale=scale)
     _pl.plot(ff[1:],psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
     self.opt_plot_psd(xlog,ylog)
+  def plot_orb_fft(self,bb='b1h',nfft=None,window=None,n0=0,scale=1.0,lbl=None,color='b',linestyle='-'):
+    """plot the orbit [mum] and FFT spectrum in mum
+    window = window function
+    nfft   = number of data points used for FFT
+    n0     = use data[n0:n0+nfft] (to be implemented)
+    scale  = scale input data by *scale*
+    """
+    if lbl == None:
+      lbl=bb.upper()
+    xx     = self.orb()[bb]
+    ff,orbfft = self.fft(bb=bb,nfft=nfft,window=window,scale=scale)
+    _pl.clf()
+    _pl.subplot(211)
+    _pl.plot(xx,label=lbl)
+    self.opt_plot_orb(ylim=(-30,30)) 
+    _pl.legend(loc='lower left')
+    _pl.subplot(212)
+    _pl.plot(ff[1:],_np.abs(orbfft[1:]),color=color,linestyle=linestyle,label='%s, scale=%4.2f'%(lbl,scale))#do not plot DC offset
+    self.opt_plot_fft(True,True)
+    _pl.legend(loc='lower left')
+    _pl.ylim(1.e-4,1.e6)
   def plot_orb_psd(self,bb='b1h',nfft=None,window=None,n0=0,scale=1.0,lbl=None,color='b',linestyle='-'):
     """plot the orbit [mum] and PSD spectrum in mum**2/Hz
     window = window function
@@ -359,13 +380,49 @@ class doros():
     FFtscale=self.FsamADC/(nfft-1)
     ff=_np.arange(nfft/2+1)*FFtscale
     return ff,orbfft
-  def opt_plot(self,log):
+  def fft(self,bb='b1h',nfft=None,window=_np.hanning,scale=1.0):
+    """calculate the fft, orbit in mum with the mean
+    value subtracted (see self.orb) 
+    window = window function
+    nfft   = number of data points used for FFT
+    scale  = scale orbit by *scale*, e.g. 1/self.betabpm()
+    """
+    xx=scale*self.orb()[bb]
+    if nfft==None: nfft=len(xx)
+    if(window is not None):
+      xx=window(len(xx))*xx
+    ff=_np.arange(nfft/2+1)*self.FsamADC/(nfft-1)
+    orbfft=_np.fft.rfft(xx)
+    return ff,orbfft
+  def opt_plot_fft(self,xlog,ylog):
+    _pl.xlim(1,100)
+    _pl.xlabel(r'f [Hz]',fontsize=16)
+    _pl.ylabel(r'[$\mu$m]')
+    _pl.grid(which='both')
+    _pl.title(r'$\beta_{IP%s}*=%s $m '%(self.ip,self.beta['betaIP'+self.ip]))
+    if(xlog):
+      _pl.xscale('log')
+    if(ylog):
+      _pl.yscale('log')
+  def opt_plot_dB(self,log):
     _pl.xlim(0,100)
     _pl.xlabel('f [Hz]')
     _pl.ylabel('dB')
     _pl.grid(which='both')
     if(log):
       _pl.xscale('log')
+  def plot_fft(self,bb='b1h',nfft=None,window=None,n0=0,offset=0,lbl='',color='b',linestyle='-',xlog=True,ylog=True,scale=1.0):
+    """plot the FFT spectrum , where the orbit data is normalized
+    with the beta at the bpms:
+    window = window function
+    nfft   = number of data points used for FFT
+    n0     = use data[n0:n0+nfft]
+    offset = curve is shifted by offset in plot to distinguish lines
+             which would coincide
+    """
+    ff,orbfft=self.fft(bb=bb,nfft=nfft,window=window,scale=scale)
+    _pl.plot(ff[1:],offset+_np.abs(orbfft)[1:],color=color,linestyle=linestyle,label=lbl)#don't plot the DC part
+    self.opt_plot_fft(xlog,ylog)
   def plot_fft_dB(self,bb='b1h',nfft=None,window=None,n0=0,offset=0,lbl='',color='b',linestyle='-',log=True):
     """plot the FFT spectrum in dB, where the amplitude is normalized
     in respect of the maximum value:
@@ -379,4 +436,4 @@ class doros():
     """
     ff,orbfft=self.abs_fft_dB(bb=bb,nfft=nfft,window=window,n0=n0)
     _pl.plot(ff,offset+orbfft,color=color,linestyle=linestyle,label=lbl)
-    self.opt_plot(log)
+    self.opt_plot_dB(log)
