@@ -11,6 +11,24 @@ import sys
 sys.path.append('/Users/mfittere/lib/python/pyspec')
 import localdate
 
+def ipaddress_to_irlr(ipaddress):
+  if(ipaddress=='172_18_66_233'):
+    ip='1'
+    side='R'
+    front='frontend 1'
+  if(ipaddress=='172_18_66_234'):
+    ip='1'
+    side='L'
+    front='frontend 2'
+  if(ipaddress=='172_18_41_214'):
+    ip='5'
+    side='R'
+    front='frontend 1'
+  if(ipaddress=='172_18_53_135'):
+    ip='5'
+    side='L'
+    front='frontend 2'
+  return ip,side,front
 def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
   """read in the binary file with filename fn
   and return the header in data['header']
@@ -24,18 +42,21 @@ def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
     Data"""
   # dataAll=_np.fromfile(file=fn,dtype=_np.uint8,count=-1,sep="") #get the full data
 #    adc=ADCb1Data.view('uint32')
-  if(fn.split('IP')[1].split('_Data')[0]=='172_18_66_233'):
-    ip='1'
-    print '... read data from frontend 1 (IR%s right)'%ip
-  if(fn.split('IP')[1].split('_Data')[0]=='172_18_66_234'):
-    ip='1'
-    print '... read data from frontend 2 (IR%s left)'%ip
-  if(fn.split('IP')[1].split('_Data')[0]=='172_18_41_214'):
-    ip='5'
-    print '... read data from frontend 1 (IR%s right)'%ip
-  if(fn.split('IP')[1].split('_Data')[0]=='172_18_53_135'):
-    ip='5'
-    print '... read data from frontend 2 (IR%s left)'%ip
+  ptostr={'L':'left','R':'right'}
+  ip,side,front=ipaddress_to_irlr(fn.split('IP')[1].split('_Data')[0])
+  print '... read data from %s (IR%s %s)'%(front,ip,ptostr[side])
+#  if(fn.split('IP')[1].split('_Data')[0]=='172_18_66_233'):
+#    ip='1'
+#    print '... read data from frontend 1 (IR%s right)'%ip
+#  if(fn.split('IP')[1].split('_Data')[0]=='172_18_66_234'):
+#    ip='1'
+#    print '... read data from frontend 2 (IR%s left)'%ip
+#  if(fn.split('IP')[1].split('_Data')[0]=='172_18_41_214'):
+#    ip='5'
+#    print '... read data from frontend 1 (IR%s right)'%ip
+#  if(fn.split('IP')[1].split('_Data')[0]=='172_18_53_135'):
+#    ip='5'
+#    print '... read data from frontend 2 (IR%s left)'%ip
   ff = open(fn,'rb')
   header = map(ord,ff.read(LheaderData))
   NumOfFileDumps   = header[0]+header[1]*2**8+header[2]*2**16+header[3]*2**24 #number of files dumped
@@ -82,9 +103,9 @@ def getbeta(dn,force=False):
     #get the largest file number = latest timestamp
     idxmax = str(max([ int(((fn.split('.')[0]).split('_'))[-1]) for fn in files ]))
     fnmax  = (glob.glob(dn+'/*_'+idxmax+'.bin'))[-1]
-    #add 10 min at beginning and end`
-    start = localdate.dumpdate(localdate.addtimedelta(os.path.getmtime(fnmin),-60*10))
-    end   = localdate.dumpdate(localdate.addtimedelta(os.path.getmtime(fnmax),60*10) )
+    #add 60 min at beginning and end`
+    start = localdate.dumpdate(localdate.addtimedelta(os.path.getmtime(fnmin),-60*60))
+    end   = localdate.dumpdate(localdate.addtimedelta(os.path.getmtime(fnmax),60*60) )
 #    start = doros.getdata(fnmin).dumpdate()
 #    end   = doros.getdata(fnmax).dumpdate()
     try:
@@ -291,6 +312,7 @@ class doros():
     self.opt_plot_fft(True,True)
     _pl.legend(loc='lower left')
     _pl.ylim(1.e-4,1.e6)
+    _pl.tight_layout()
   def plot_orb_psd(self,bb='b1h',nfft=None,window=None,n0=0,scale=1.0,lbl=None,color='b',linestyle='-'):
     """plot the orbit [mum] and PSD spectrum in mum**2/Hz
     window = window function
@@ -311,7 +333,8 @@ class doros():
     _pl.plot(ff[1:],psd[1:],color=color,linestyle=linestyle,label='%s, scale=%4.2f'%(lbl,scale))#do not plot DC offset
     self.opt_plot_psd(True,True)
     _pl.legend(loc='lower left')
-    _pl.ylim(1.e-16,1.e-7)
+    _pl.ylim(1.e-16,1.e-6)
+    _pl.tight_layout()
   def plot_orb_all(self):
     """plot orbit position change in mum"""
     _pl.clf()
@@ -389,6 +412,7 @@ class doros():
     """
     xx=scale*self.orb()[bb]
     if nfft==None: nfft=len(xx)
+    xx=xx[0:nfft]
     if(window is not None):
       xx=window(len(xx))*xx
     ff=_np.arange(nfft/2+1)*self.FsamADC/(nfft-1)
