@@ -9,7 +9,6 @@ from scipy.signal import welch
 from rdmstores import *
 import sys
 sys.path.append('/Users/mfittere/lib/python/pyspec')
-import localdate
 
 def ipaddress_to_irlr(ipaddress):
   if(ipaddress=='172_18_66_233'):
@@ -99,17 +98,24 @@ def getbeta(dn,force=False):
     print '%s found!'%(dn+'/betastar.p')
   else:
     #all files start at 1 = earliest timestamp
-    fnmin  = (glob.glob(dn+'/*_1.bin'))[0]
+    fn_1=(glob.glob(dn+'/*_1.bin'))
+    afnmin = _np.argmin([ os.path.getmtime(fn) for fn in fn_1 ])
+    fnmin  = fn_1[afnmin]
     #get the largest file number = latest timestamp
-    idxmax = str(max([ int(((fn.split('.')[0]).split('_'))[-1]) for fn in files ]))
-    fnmax  = (glob.glob(dn+'/*_'+idxmax+'.bin'))[-1]
+    idxmax=[]
+    for fn in fn_1:
+      fnall=glob.glob(fn.replace('_1.bin','_*.bin'))#get all files for filename fn
+      idxmax.append(str(max([ int(((fn.split('.')[0]).split('_'))[-1]) for fn in fnall ]))) #get maximum index
+    fn_max=[ fn.replace('_1.bin','_%s.bin'%idx) for fn,idx in zip(fn_1,idxmax) ]
+    afnmax = _np.argmax([ os.path.getmtime(fn) for fn in fn_max ])
+    fnmax  = fn_max[afnmax]
     #add 60 min at beginning and end`
-    start = localdate.dumpdate(localdate.addtimedelta(os.path.getmtime(fnmin),-60*60))
-    end   = localdate.dumpdate(localdate.addtimedelta(os.path.getmtime(fnmax),60*60) )
+    start = dumpdate(addtimedelta(os.path.getmtime(fnmin),-60*60))
+    end   = dumpdate(addtimedelta(os.path.getmtime(fnmax),60*60) )
 #    start = doros.getdata(fnmin).dumpdate()
 #    end   = doros.getdata(fnmax).dumpdate()
     try:
-      beta  = measdb.get(['HX:BETASTAR_IP1','HX:BETASTAR_IP2','HX:BETASTAR_IP5','HX:BETASTAR_IP8'],start,end)
+      beta  = logdb.get(['HX:BETASTAR_IP1','HX:BETASTAR_IP2','HX:BETASTAR_IP5','HX:BETASTAR_IP8'],start,end)
       pickle.dump(beta,open(dn+'/betastar.p',"wb"))
     except IOError:
       print 'ERROR: measurement database can not be accessed!'
@@ -131,8 +137,8 @@ class doros():
   FullScale = 2^24
   #Decoding parameters
   nChan = 8  # number of channel 
-  nByte = 4  # number of bytes per sample 
-  nFramePerADCb = 15#number of frames per ADC buffer 
+  nByte = 4  # number of bytes per sample
+  nFramePerADCb = 15#number of frames per ADC buffer
   nADCBuff = 2#number of ADC buffers (or ADCs)
   nADCchan = 8#Number of ADC channels
   LheaderData = 8# Data header length
@@ -181,7 +187,7 @@ class doros():
             betasample['betaIP'+ii] = 0.0
         else:
           for ii in ['1','2','5','8']:
-            idxaux = localdate.argmtime(beta.data['HX:BETASTAR_IP'+ii][0],t0=mtime) 
+            idxaux = argmtime(beta.data['HX:BETASTAR_IP'+ii][0],t0=mtime) 
             betasample['betaIP'+ii] = beta.data['HX:BETASTAR_IP'+ii][1][idxaux]
         #store already processed orbit data in *.p
         pickle.dump([b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime,betasample,ip],open(fn+'.p',"wb"))  
@@ -235,7 +241,7 @@ class doros():
       print 'WARNING: not all b[12][hv][12] arrays have the same length!' 
     return ll,ll/self.FsamADC
   def dumpdate(self,fmt='%Y-%m-%d %H:%M:%S.SSS'):
-    return localdate.dumpdate(self.mtime,fmt=fmt) 
+    return dumpdate(self.mtime,fmt=fmt) 
   def betabpm(self):
     """return beta at DOROS BPMs for beta*=beta
     beta_doros=beta+s**2/beta
