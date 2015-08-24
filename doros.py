@@ -7,6 +7,7 @@ import glob as glob
 import spec as spec
 from scipy.signal import welch
 from rdmstores import *
+from timbertools import getbetasample
 import sys
 sys.path.append('/Users/mfittere/lib/python/pyspec')
 
@@ -44,18 +45,6 @@ def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
   ptostr={'L':'left','R':'right'}
   ip,side,front=ipaddress_to_irlr(fn.split('IP')[1].split('_Data')[0])
   print '... read data from %s (IR%s %s)'%(front,ip,ptostr[side])
-#  if(fn.split('IP')[1].split('_Data')[0]=='172_18_66_233'):
-#    ip='1'
-#    print '... read data from frontend 1 (IR%s right)'%ip
-#  if(fn.split('IP')[1].split('_Data')[0]=='172_18_66_234'):
-#    ip='1'
-#    print '... read data from frontend 2 (IR%s left)'%ip
-#  if(fn.split('IP')[1].split('_Data')[0]=='172_18_41_214'):
-#    ip='5'
-#    print '... read data from frontend 1 (IR%s right)'%ip
-#  if(fn.split('IP')[1].split('_Data')[0]=='172_18_53_135'):
-#    ip='5'
-#    print '... read data from frontend 2 (IR%s left)'%ip
   ff = open(fn,'rb')
   header = map(ord,ff.read(LheaderData))
   NumOfFileDumps   = header[0]+header[1]*2**8+header[2]*2**16+header[3]*2**24 #number of files dumped
@@ -77,21 +66,7 @@ def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
 #    data['header']=data[LheaderData+Ludp:LheaderData + Ludp*(nUdp-1) +LheaderUdp:Ludp]
 #  return data[0:TotalLenOfFile],udpcheck
   return data,udpcheck,ip
-
-def decode_chan(data,ADCbnFrameAddr,nADCchan,nByte,LADCbBuff,nChan,SampleDecimation,beam='b1'):
-  #extract ADCb[12] buffer
-  ADCbnFrames = data['header'][:,ADCbnFrameAddr-1]
-  nTotalADCbBuffDataFrames = sum(ADCbnFrames)
-  if(beam=='b1'):
-    ADCbData = _np.hstack(_np.array([ data['data'][idx,0:ADCbnFrames[idx]*nADCchan*nByte] for idx in range(len(ADCbnFrames)) ]))
-  if(beam=='b2'):
-    ADCbData = _np.hstack(_np.array([ data['data'][idx,LADCbBuff:LADCbBuff+ADCbnFrames[idx]*nADCchan*nByte] for idx in range(len(ADCbnFrames)) ]))
-  #decode channel data
-  ADCbdataDec=_np.array([ (2**24*ADCbData[4*idx]+2**16*ADCbData[4*idx+1]+2**8*ADCbData[4*idx+2]+ADCbData[4*idx+3]+2**23) & (2**24-1) for idx in range(nTotalADCbBuffDataFrames*nChan) ],dtype=float)
-  ADCchanTable = _np.array([ ADCbdataDec[idx:idx+nTotalADCbBuffDataFrames*nChan:SampleDecimation*nChan] for idx in range(nChan) ])
-  return ADCchanTable
-
-def getbeta(dn,force=False):
+def getbeta_doros(dn,force=False):
   files=glob.glob(dn+'/*.bin')
   if( force==False and os.path.isfile(dn+'/betastar.p')):
     beta = pickle.load(open(dn+'/betastar.p',"rb"))
@@ -121,6 +96,19 @@ def getbeta(dn,force=False):
       print 'ERROR: measurement database can not be accessed!'
       beta=None
   return beta
+
+def decode_chan(data,ADCbnFrameAddr,nADCchan,nByte,LADCbBuff,nChan,SampleDecimation,beam='b1'):
+  #extract ADCb[12] buffer
+  ADCbnFrames = data['header'][:,ADCbnFrameAddr-1]
+  nTotalADCbBuffDataFrames = sum(ADCbnFrames)
+  if(beam=='b1'):
+    ADCbData = _np.hstack(_np.array([ data['data'][idx,0:ADCbnFrames[idx]*nADCchan*nByte] for idx in range(len(ADCbnFrames)) ]))
+  if(beam=='b2'):
+    ADCbData = _np.hstack(_np.array([ data['data'][idx,LADCbBuff:LADCbBuff+ADCbnFrames[idx]*nADCchan*nByte] for idx in range(len(ADCbnFrames)) ]))
+  #decode channel data
+  ADCbdataDec=_np.array([ (2**24*ADCbData[4*idx]+2**16*ADCbData[4*idx+1]+2**8*ADCbData[4*idx+2]+ADCbData[4*idx+3]+2**23) & (2**24-1) for idx in range(nTotalADCbBuffDataFrames*nChan) ],dtype=float)
+  ADCchanTable = _np.array([ ADCbdataDec[idx:idx+nTotalADCbBuffDataFrames*nChan:SampleDecimation*nChan] for idx in range(nChan) ])
+  return ADCchanTable
 
 class doros():
   """class to import data from DOROS BPMS"""
@@ -181,14 +169,7 @@ class doros():
         #number of valid frames per udp ADC1 buffer
         [b1h1,b1h2,b1v1,b1v2]=ADC1chanTable[0:4]/(2**24-1)
         [b2h1,b2h2,b2v1,b2v2]=ADC2chanTable[0:4]/(2**24-1)
-        betasample={}
-        if beta == None:
-          for ii in ['1','2','5','8']: 
-            betasample['betaIP'+ii] = 0.0
-        else:
-          for ii in ['1','2','5','8']:
-            idxaux = argmtime(beta.data['HX:BETASTAR_IP'+ii][0],t0=mtime) 
-            betasample['betaIP'+ii] = beta.data['HX:BETASTAR_IP'+ii][1][idxaux]
+        betasample=getbetasample(beta,mtime)
         #store already processed orbit data in *.p
         pickle.dump([b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime,betasample,ip],open(fn+'.p',"wb"))  
         print '... store b1h1,b1h2,b2h1,b2h2 etc. in file %s.p for faster reload'%(fn.split('/')[-1])
@@ -219,7 +200,7 @@ class doros():
     """process orbit data in directory dn and
     store it in *.p files"""
     files = glob.glob(dn+'/*.bin')
-    beta  = getbeta(dn,force=True) #rdmstore object with beta* values
+    beta  = getbeta_doros(dn,force=True) #rdmstore object with beta* values
     for fn in files:
       if(os.path.isfile(fn[0:-4]+'.p') and force==False):
         print fn+' is already processed'
@@ -427,7 +408,7 @@ class doros():
   def opt_plot_fft(self,xlog,ylog):
     _pl.xlim(1,100)
     _pl.xlabel(r'f [Hz]',fontsize=16)
-    _pl.ylabel(r'[$\mu$m]')
+    _pl.ylabel(r'amplitude [$\mu$m]')
     _pl.grid(which='both')
     _pl.title(r'$\beta_{IP%s}*=%s $m '%(self.ip,self.beta['betaIP'+self.ip]))
     if(xlog):
