@@ -141,6 +141,7 @@ class doros():
   #UDP per frame
   LdataUdp = nByte*nChan*nFramePerADCb*nADCBuff #number of bytes of UDP data
   Ludp = LheaderUdp + LdataUdp #UDP header + data length
+  ipadress_frontend = ['172_18_41_214','172_18_53_135','172_18_66_233','172_18_66_234']
   def __init__(self,b1h1=[],b1h2=[],b1v1=[],b1v2=[],b2h1=[],b2h2=[],b2v1=[],b2v2=[],mtime=None,beta=None,ip='1'):
     self.ip    = ip
     self.beta  = beta 
@@ -297,6 +298,7 @@ class doros():
     _pl.subplot(212)
     _pl.plot(ff[1:],_np.abs(orbfft[1:]),color=color,linestyle=linestyle,label='%s, scale=%4.2f'%(lbl,scale))#do not plot DC offset
     self.opt_plot_fft(True,True)
+    _pl.title('')
     _pl.legend(loc='lower left')
     _pl.ylim(1.e-4,1.e6)
     _pl.tight_layout()
@@ -319,6 +321,7 @@ class doros():
     _pl.subplot(212)
     _pl.plot(ff[1:],psd[1:],color=color,linestyle=linestyle,label='%s, scale=%4.2f'%(lbl,scale))#do not plot DC offset
     self.opt_plot_psd(True,True)
+    _pl.title('')
     _pl.legend(loc='lower left')
     _pl.ylim(1.e-16,1.e-6)
     _pl.tight_layout()
@@ -347,12 +350,13 @@ class doros():
     _pl.grid(which='both')
     _pl.xlabel('number of turns') 
     _pl.ylabel(r'z [$\mu$m]') 
+    _pl.title(r'$\beta_{IP%s}*=%s $cm, %s'%(self.ip,self.beta['betaIP'+self.ip],dumpdate(self.mtime,fmt='%Y-%m-%d %H:%M:%S')))
   def opt_plot_psd(self,xlog,ylog):
     _pl.xlim(1,100)
     _pl.xlabel(r'f [Hz]',fontsize=16)
     _pl.ylabel(r'PSD [$\mathrm{\mu m}^2$/Hz]',fontsize=14)
     _pl.grid(which='both')
-    _pl.title(r'$\beta_{IP%s}*=%s $m '%(self.ip,self.beta['betaIP'+self.ip]))
+    _pl.title(r'$\beta_{IP%s}*=%s $cm, %s'%(self.ip,self.beta['betaIP'+self.ip],dumpdate(self.mtime,fmt='%Y-%m-%d %H:%M:%S')))
     if(xlog):
       _pl.xscale('log')
     if(ylog):
@@ -410,7 +414,7 @@ class doros():
     _pl.xlabel(r'f [Hz]',fontsize=16)
     _pl.ylabel(r'amplitude [$\mu$m]')
     _pl.grid(which='both')
-    _pl.title(r'$\beta_{IP%s}*=%s $m '%(self.ip,self.beta['betaIP'+self.ip]))
+    _pl.title(r'$\beta_{IP%s}*=%s $cm, %s'%(self.ip,self.beta['betaIP'+self.ip],dumpdate(self.mtime,fmt='%Y-%m-%d %H:%M:%S')))
     if(xlog):
       _pl.xscale('log')
     if(ylog):

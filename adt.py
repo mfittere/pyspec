@@ -318,13 +318,13 @@ class adt():
     _pl.grid(which='both')
     _pl.xlabel('number of turns')
     _pl.ylabel(r'z [$\mu$m]')
-    _pl.title(r'$\beta*_{\rm IP1}=$%4.2f m, %s'%(self.beta['betaIP1'],dumpdate(self.t0,fmt='%Y-%m-%d %H:%M:%S')))
+    _pl.title(r'$\beta*_{\rm IP1}=$%4.2f cm, %s'%(self.beta['betaIP1'],dumpdate(self.t0,fmt='%Y-%m-%d %H:%M:%S')))
   def opt_plot_fft(self,xlog,ylog):
     _pl.xlim(1,100)
     _pl.xlabel(r'f [Hz]')
     _pl.ylabel(r'amplitude [$\mathrm{\mu m}$]')#abs(fft)
     _pl.grid(which='both')
-    _pl.title(r'$\beta*_{\rm IP1}=$%4.2f m, %s'%(self.beta['betaIP1'],dumpdate(self.t0,fmt='%Y-%m-%d %H:%M:%S')))
+    _pl.title(r'$\beta*_{\rm IP1}=$%4.2f cm, %s'%(self.beta['betaIP1'],dumpdate(self.t0,fmt='%Y-%m-%d %H:%M:%S')))
     if(xlog):
       _pl.xscale('log')
     if(ylog):
@@ -334,7 +334,7 @@ class adt():
     _pl.xlabel(r'f [Hz]')
     _pl.ylabel(r'PSD [$\mathrm{\mu m}^2$/Hz]')
     _pl.grid(which='both')
-    _pl.title(r'$\beta*_{\rm IP1}=$%4.2f m, %s'%(self.beta['betaIP1'],dumpdate(self.t0,fmt='%Y-%m-%d %H:%M:%S')))
+    _pl.title(r'$\beta*_{\rm IP1}=$%4.2f cm, %s'%(self.beta['betaIP1'],dumpdate(self.t0,fmt='%Y-%m-%d %H:%M:%S')))
     if(xlog):
       _pl.xscale('log')
     if(ylog):
