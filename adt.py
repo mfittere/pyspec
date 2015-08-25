@@ -52,7 +52,7 @@ def getbeta_adt(dn,force=False):
       beta  = logdb.get(['HX:BETASTAR_IP1','HX:BETASTAR_IP2','HX:BETASTAR_IP5','HX:BETASTAR_IP8'],start,end)
       pickle.dump(beta,open(dn+'/betastar.p',"wb"))
     except IOError:
-      print 'ERROR: logdb can not be accessed!'
+      print 'ERROR: logdb can not be accessed! No beta* value obtained.'
       beta=None
   return beta
 
@@ -167,7 +167,7 @@ class adt():
     _pl.clf()
     _pl.gcf().set_tight_layout(True)
     _pl.subplot(211)
-    _pl.plot(xx,label=lbl)
+    _pl.plot(xx,label=lbl,color=color,linestyle=linestyle)
     self.opt_plot_orb(ylim=(-30,30))
     _pl.legend(loc='lower left')
     _pl.subplot(212)
@@ -203,7 +203,7 @@ class adt():
     _pl.clf()
     _pl.gcf().set_tight_layout(True)
     _pl.subplot(211)
-    _pl.plot(xx,label=lbl)
+    _pl.plot(xx,label=lbl,color=color,linestyle=linestyle)
     self.opt_plot_orb(ylim=(-30,30))
     _pl.legend(loc='lower left')
     _pl.subplot(212)
@@ -230,13 +230,13 @@ class adt():
     _pl.grid(which='both')
     _pl.xlabel('number of turns')
     _pl.ylabel(r'z [$\mu$m]')
-    _pl.title(r'$\beta*_{\rm IP1}=$%4.2f m'%self.beta['betaIP1'])
+    _pl.title(r'$\beta*_{\rm IP1}=$%4.2f m, %s'%(self.beta['betaIP1'],dumpdate(self.t0,fmt='%Y-%m-%d %H:%M:%S')))
   def opt_plot_fft(self,xlog,ylog):
     _pl.xlim(1,100)
     _pl.xlabel(r'f [Hz]')
     _pl.ylabel(r'amplitude [$\mathrm{\mu m}$]')#abs(fft)
     _pl.grid(which='both')
-    _pl.title(r'$\beta*_{\rm IP1}=$%4.2f m'%self.beta['betaIP1'])
+    _pl.title(r'$\beta*_{\rm IP1}=$%4.2f m, %s'%(self.beta['betaIP1'],dumpdate(self.t0,fmt='%Y-%m-%d %H:%M:%S')))
     if(xlog):
       _pl.xscale('log')
     if(ylog):
@@ -246,7 +246,7 @@ class adt():
     _pl.xlabel(r'f [Hz]')
     _pl.ylabel(r'PSD [$\mathrm{\mu m}^2$/Hz]')
     _pl.grid(which='both')
-    _pl.title(r'$\beta*_{\rm IP1}=$%4.2f m'%self.beta['betaIP1'])
+    _pl.title(r'$\beta*_{\rm IP1}=$%4.2f m, %s'%(self.beta['betaIP1'],dumpdate(self.t0,fmt='%Y-%m-%d %H:%M:%S')))
     if(xlog):
       _pl.xscale('log')
     if(ylog):
