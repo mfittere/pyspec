@@ -8,7 +8,8 @@ from rdmstores import *
 import glob as glob
 import os as os
 import cPickle as pickle
-from timbertools import getbetasample
+from timbertools import *
+
 
 def get_timestamp_adt(fn):
   if '/' in fn:
@@ -18,6 +19,8 @@ def get_timestamp_adt(fn):
   date='-'.join([date[0:4],date[4:6],date[6:8]])
   time=':'.join([time[0:2],time[3:5],time[6:8]+'.000'])
   return date+' '+time
+def sort_files(files):
+  return (mk_sort_files(get_timestamp_adt))(files)
 def get_fn_data(fn):
   """get time stamp, plane and bunch number
   from filename fn"""
@@ -32,14 +35,14 @@ def get_fn_data(fn):
   dic={'Hor':'h','Ver':'v'}
   plane=beam+dic[planepos.split('pos')[1].split('Q')[0]] 
   return idxbunch,timestamp,pos,plane,beam
-def getbeta_adt(dn,force=False):
+def getbeta_adt(dn,force=False,verbose=False):
   """get beta function for all files in folder *dn*,
   data is saved in a pickled file with the normal
   format as from rdmstores/timber"""
   files=glob.glob(dn+'/*.mat')
   if( force==False and os.path.isfile(dn+'/betastar.p')):
     beta = pickle.load(open(dn+'/betastar.p',"rb"))
-    print '%s found!'%(dn+'/betastar.p')
+    if verbose == True: print '%s found!'%(dn+'/betastar.p')
   else:
     #get earliest and latest timestamp
     fmt='%Y-%m-%d %H:%M:%S.SSS'
@@ -59,8 +62,9 @@ def getbeta_adt(dn,force=False):
 class adt():
   """class to import data from ADT"""
   bitstomum = 1/3.0 #3 bits per mum for conversion of the signal
-  def __init__(self,idxbunch=0,timestamp='2008-09-10 08:30:00.000',pos='Q9L',plane='h',beam='B1',data=[],fs=11245.0,beta=0):
+  def __init__(self,idxbunch=0,timestamp='2008-09-10 08:30:00.000',pos='Q9L',plane='h',beam='B1',data=[],fs=11245.0,beta=0,fn=''):
     """idxbunch:  bunch number
+       filename:  source data file
        timestamp: timestamp of measurement (starting time)
        pos:       ADT pickup (Q9[LR],Q7[LR] beam 1 or beam2)
        plane:     plane (horizontal or vetical)
@@ -76,6 +80,7 @@ class adt():
     self.fs        = fs
     self.beta      = beta
     self.data={plane:_np.array(data)}
+    self.filename  = fn  
   @classmethod
   def getdata(cls,fn,force=False):
     """load data and return orbit in mum"""
@@ -88,7 +93,7 @@ class adt():
     mtime = strpunix(get_timestamp_adt(fn),'%Y-%m-%d %H:%M:%S.SSS') #get timestamp
     betasample=getbetasample(beta,mtime)
     fs = 11245.0 #revolution frequency
-    return cls(idxbunch,timestamp,pos,plane,beam,data,fs,betasample)
+    return cls(idxbunch,timestamp,pos,plane,beam,data,fs,betasample,fn)
   def orb(self):
     """subtract mean value from orbit"""
     xx=self.data[self.plane]
@@ -139,6 +144,89 @@ class adt():
     xx=xx[n0:n1]
     ff,psd=welch(xx,window=window(nperseg),nperseg=nperseg,noverlap=noverlap,nfft=None,detrend=False,return_onesided=True,scaling='density')
     return ff,psd
+  def fft_bartlett(self,nfft=None,aavg=20,nslice=None,window=_np.hanning,scale=1.0):
+    directory=os.path.dirname(self.filename)
+    filenames='%s/*%s%s*%s.mat'%(directory,self.pos,self.plane[:-1].upper(),self.idxbunch)
+    files=sort_files(glob.glob(filenames))
+    start= files.index(self.filename)
+    if nslice == None or nslice==0 or nslice==1:
+      n0s = [0]
+      nfft = None #then takes the full length
+    else:
+      nfft = int(len(self.data[self.plane]-7)/nslice)#if length not given take full length minus 7 points margin in case points are missing
+      n0s   = [int(n) for n in _np.arange(nslice)*nfft ]
+      aavg = int(round(aavg/nslice))
+    end  = start+aavg
+    if end > len(files):#in case not enough files are there for averaging
+      end = len(files)
+      aavg = end - start
+      print 'average only over %s files'%aavg
+    lfft={'f':[],'fft':[]}
+    for ii in start+_np.arange(aavg):#take average over aavg files with larger timestamp
+      fn=files[ii]
+      dd=adt.getdata(fn)
+      for n0 in n0s:
+        f_fft,fft=dd.fft(nfft=nfft,n0=n0,window=window,scale=scale)
+        lfft['f'].append(f_fft)
+        lfft['fft'].append(_np.abs(fft))
+    f_fft_avg=_np.mean(lfft['f'],axis=0)
+    fft_avg=_np.mean(lfft['fft'],axis=0)
+    return f_fft_avg,fft_avg
+  def psd_bartlett(self,nfft=None,aavg=20,nslice=None,window=_np.hanning,scale=1.0):
+    directory=os.path.dirname(self.filename)
+    filenames='%s/*%s%s*%s.mat'%(directory,self.pos,self.plane[:-1].upper(),self.idxbunch)
+    files=sort_files(glob.glob(filenames))
+    start= files.index(self.filename)
+    if nslice == None or nslice==0 or nslice==1:
+      n0s = [0]
+      nfft = None #then takes the full length
+    else:
+      nfft = int(len(self.data[self.plane]-7)/nslice)#if length not given take full length minus 7 points margin in case points are missing
+      n0s   = [int(n) for n in _np.arange(nslice)*nfft ]
+      aavg = int(round(aavg/nslice))
+    end  = start+aavg
+    if end > len(files):#in case not enough files are there for averaging
+      end = len(files)
+      aavg = end - start
+      print 'average only over %s files'%aavg
+    lpsd={'f':[],'psd':[]}
+    for ii in start+_np.arange(aavg):#take average over aavg files with larger timestamp
+      fn=files[ii]
+      dd=adt.getdata(fn)
+      for n0 in n0s:
+        f_psd,psd=dd.psd(nfft=nfft,n0=n0,window=window,scale=scale)
+        lpsd['f'].append(f_psd)
+        lpsd['psd'].append(_np.abs(psd))
+    f_psd_avg=_np.mean(lpsd['f'],axis=0)
+    psd_avg=_np.mean(lpsd['psd'],axis=0)
+    return f_psd_avg,psd_avg
+  def plot_psd_bartlett(self,nfft=None,aavg=20,nslice=None,window=None,scale=1.0,lbl=None,color='b',linestyle='-',xlog=True,ylog=True):
+    """plot the PSD spectrum in mum**2/Hz
+    averaged over *aavg* samples (bartlett
+    method)
+    window = window function
+    nfft   = number of data points used for FFT
+    n0     = use data[n0:n0+nfft]
+    scale  = scale input data by *scale*
+    """
+    if lbl==None:
+      lbl='%s %s'%(self.pos,self.plane)
+    ff,psd=self.psd_bartlett(nfft=nfft,aavg=aavg,nslice=nslice,window=window,scale=scale)
+    _pl.plot(ff[1:],psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
+    self.opt_plot_psd(xlog,ylog)
+  def plot_fft_bartlett(self,nfft=None,aavg=20,nslice=None,window=None,scale=1.0,lbl=None,color='b',linestyle='-',xlog=True,ylog=True):
+    """plot the fft spectrum in mum
+    where the fft is averaged with the bartlett method
+    window = window function
+    nfft   = number of data points used for FFT
+    n0     = use data[n0:n0+nfft]
+    scale  = scale input data by *scale*
+    """
+    if lbl==None:
+      lbl='%s %s'%(self.pos,self.plane)
+    ff,fft=self.fft_bartlett(nfft=nfft,aavg=aavg,nslice=nslice,window=window,scale=scale)
+    _pl.plot(ff[1:],_np.abs(fft[1:]),color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
+    self.opt_plot_fft(xlog,ylog)
   def plot_fft(self,nfft=None,n0=0,window=None,scale=1.0,lbl=None,color='b',linestyle='-',xlog=True,ylog=True):
     """plot the fft spectrum in mum
     window = window function
