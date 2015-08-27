@@ -142,7 +142,8 @@ class doros():
   LdataUdp = nByte*nChan*nFramePerADCb*nADCBuff #number of bytes of UDP data
   Ludp = LheaderUdp + LdataUdp #UDP header + data length
   ipadress_frontend = ['172_18_41_214','172_18_53_135','172_18_66_233','172_18_66_234']
-  def __init__(self,b1h1=[],b1h2=[],b1v1=[],b1v2=[],b2h1=[],b2h2=[],b2v1=[],b2v2=[],mtime=None,beta=None,ip='1'):
+  def __init__(self,b1h1=[],b1h2=[],b1v1=[],b1v2=[],b2h1=[],b2h2=[],b2v1=[],b2v2=[],mtime=None,beta=None,ip='1',filename=[]):
+    self.filename = filename
     self.ip    = ip
     self.beta  = beta 
     self.mtime = mtime
@@ -179,7 +180,7 @@ class doros():
         betasample = None
         mtime=0
         [b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2]=[[] for x in range(8)]
-    return cls(b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime,betasample,ip)
+    return cls(b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime,betasample,ip,fn)
   def checkdata(self,fn):
     """check for errors in data acquisition"""
     LeAll = os.path.getsize(fn)#total file byte length
@@ -279,6 +280,8 @@ class doros():
     ff,psd=self.psd(bb=bb,nfft=nfft,window=window,n0=n0,scale=scale)
     _pl.plot(ff[1:],psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
     self.opt_plot_psd(xlog,ylog)
+    #if scale !=1 values are scales with 1/sqrt(beta) -> units are mu 1.e-12*m
+    if abs(scale-1.0)>1.e-6:  _pl.ylabel(r'PSD [$p\mathrm{m}$/Hz]',fontsize=14)
   def plot_orb_fft(self,bb='b1h',nfft=None,window=None,n0=0,scale=1.0,lbl=None,color='b',linestyle='-'):
     """plot the orbit [mum] and FFT spectrum in mum
     window = window function
@@ -293,11 +296,14 @@ class doros():
     _pl.clf()
     _pl.subplot(211)
     _pl.plot(xx,label=lbl)
-    self.opt_plot_orb(ylim=(-30,30)) 
+    self.opt_plot_orb(ylim=(-30,30))
+    if abs(scale-1.0)>1.e-6: _pl.ylabel(r'z [$\mu\sqrt{\rm m}$]') 
     _pl.legend(loc='lower left')
     _pl.subplot(212)
     _pl.plot(ff[1:],_np.abs(orbfft[1:]),color=color,linestyle=linestyle,label='%s, scale=%4.2f'%(lbl,scale))#do not plot DC offset
     self.opt_plot_fft(True,True)
+    #if scale !=1 values are scales with 1/sqrt(beta) -> units are mu sqrt(m)
+    if abs(scale-1.0)>1.e-6: _pl.ylabel(r'amplitude [$\mu\sqrt{\rm m}$]')
     _pl.title('')
     _pl.legend(loc='lower left')
     _pl.ylim(1.e-4,1.e6)
@@ -317,10 +323,13 @@ class doros():
     _pl.subplot(211)
     _pl.plot(xx,label=lbl)
     self.opt_plot_orb(ylim=(-30,30)) 
+    if abs(scale-1.0)>1.e-6: _pl.ylabel(r'z [$\mu\sqrt{\rm m}$]')
     _pl.legend(loc='lower left')
     _pl.subplot(212)
     _pl.plot(ff[1:],psd[1:],color=color,linestyle=linestyle,label='%s, scale=%4.2f'%(lbl,scale))#do not plot DC offset
     self.opt_plot_psd(True,True)
+    #if scale !=1 values are scales with 1/sqrt(beta) -> units are mu 1.e-12*m
+    if abs(scale-1.0)>1.e-6:  _pl.ylabel(r'PSD [$p\mathrm{m}$/Hz]',fontsize=14)
     _pl.title('')
     _pl.legend(loc='lower left')
     _pl.ylim(1.e-16,1.e-6)
@@ -333,6 +342,7 @@ class doros():
         _pl.subplot(int(210+bb))
         _pl.plot(self.orb()['b'+str(bb)+pp],label=('b'+str(bb)+pp).upper()) 
         self.opt_plot_orb()
+        if abs(scale-1.0)>1.e-6: _pl.ylabel(r'z [$\mu\sqrt{\rm m}$]')
     _pl.legend()
   def plot_psd_welch(self,bb='b1h',n0=0,n1=None,window=_np.hanning,nperseg=4096,noverlap=None,scale=1.0,lbl='',color='b',linestyle='-',xlog=True,ylog=True):
     """plot the PSD spectrum in mum**2/Hz using the welch method
@@ -345,18 +355,20 @@ class doros():
     ff,psd=self.psd_welch(bb=bb,n0=n0,n1=n1,window=window,nperseg=nperseg,noverlap=noverlap,scale=scale)
     _pl.plot(ff[1:],psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
     self.opt_plot_psd(xlog,ylog)
+    #if scale !=1 values are scales with 1/sqrt(beta) -> units are mu 1.e-12*m
+    if abs(scale-1.0)>1.e-6:  _pl.ylabel(r'PSD [$p\mathrm{m}$/Hz]',fontsize=14)
   def opt_plot_orb(self,ylim=(-80,80)):
     _pl.ylim(ylim)
     _pl.grid(which='both')
     _pl.xlabel('number of turns') 
     _pl.ylabel(r'z [$\mu$m]') 
-    _pl.title(r'$\beta_{IP%s}*=%s $cm, %s'%(self.ip,self.beta['betaIP'+self.ip],dumpdate(self.mtime,fmt='%Y-%m-%d %H:%M:%S')))
+    _pl.title(r'$\beta_{IP%s}=%s $ cm, %s'%(self.ip,self.beta['betaIP'+self.ip],dumpdate(self.mtime,fmt='%Y-%m-%d %H:%M:%S')))
   def opt_plot_psd(self,xlog,ylog):
     _pl.xlim(1,100)
     _pl.xlabel(r'f [Hz]',fontsize=16)
     _pl.ylabel(r'PSD [$\mathrm{\mu m}^2$/Hz]',fontsize=14)
     _pl.grid(which='both')
-    _pl.title(r'$\beta_{IP%s}*=%s $cm, %s'%(self.ip,self.beta['betaIP'+self.ip],dumpdate(self.mtime,fmt='%Y-%m-%d %H:%M:%S')))
+    _pl.title(r'$\beta_{IP%s}=%s $ cm, %s'%(self.ip,self.beta['betaIP'+self.ip],dumpdate(self.mtime,fmt='%Y-%m-%d %H:%M:%S')))
     if(xlog):
       _pl.xscale('log')
     if(ylog):
@@ -414,7 +426,7 @@ class doros():
     _pl.xlabel(r'f [Hz]',fontsize=16)
     _pl.ylabel(r'amplitude [$\mu$m]')
     _pl.grid(which='both')
-    _pl.title(r'$\beta_{IP%s}*=%s $cm, %s'%(self.ip,self.beta['betaIP'+self.ip],dumpdate(self.mtime,fmt='%Y-%m-%d %H:%M:%S')))
+    _pl.title(r'$\beta_{IP%s}=%s $ cm, %s'%(self.ip,self.beta['betaIP'+self.ip],dumpdate(self.mtime,fmt='%Y-%m-%d %H:%M:%S')))
     if(xlog):
       _pl.xscale('log')
     if(ylog):
@@ -438,6 +450,8 @@ class doros():
     ff,orbfft=self.fft(bb=bb,nfft=nfft,window=window,scale=scale)
     _pl.plot(ff[1:],offset+_np.abs(orbfft)[1:],color=color,linestyle=linestyle,label=lbl)#don't plot the DC part
     self.opt_plot_fft(xlog,ylog)
+    #if scale !=1 values are scales with 1/sqrt(beta) -> units are mu sqrt(m)
+    if abs(scale-1.0)>1.e-6: _pl.ylabel(r'z [$\mu\sqrt{\rm m}$]')
   def plot_fft_dB(self,bb='b1h',nfft=None,window=None,n0=0,offset=0,lbl='',color='b',linestyle='-',log=True):
     """plot the FFT spectrum in dB, where the amplitude is normalized
     in respect of the maximum value:

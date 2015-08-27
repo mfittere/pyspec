@@ -62,7 +62,8 @@ def getbeta_adt(dn,force=False,verbose=False):
 class adt():
   """class to import data from ADT"""
   bitstomum = 1/3.0 #3 bits per mum for conversion of the signal
-  def __init__(self,idxbunch=0,timestamp='2008-09-10 08:30:00.000',pos='Q9L',plane='h',beam='B1',data=[],fs=11245.0,beta=0,fn=''):
+  beta_adt={'Q9Lb1h':130.580,'Q7Lb1h':131.252,'Q7Rb1v':114.997,'Q9Rb1v':125.984,'Q7Rb2h':201.770,'Q9Rb2h':113.417,'Q7Lb2v':167.025,'Q9Lb2v':138.484}#beta functions [m] at ADT pickups
+  def __init__(self,idxbunch=0,timestamp='2008-09-10 08:30:00.000',pos='Q9L',plane='b1h',beam='B1',data=[],fs=11245.0,beta=0,fn='',betadt=0):
     """idxbunch:  bunch number
        filename:  source data file
        timestamp: timestamp of measurement (starting time)
@@ -79,6 +80,7 @@ class adt():
     self.beam      = beam
     self.fs        = fs
     self.beta      = beta
+    self.betadt    = betadt
     self.data={plane:_np.array(data)}
     self.filename  = fn  
   @classmethod
@@ -93,7 +95,8 @@ class adt():
     mtime = strpunix(get_timestamp_adt(fn),'%Y-%m-%d %H:%M:%S.SSS') #get timestamp
     betasample=getbetasample(beta,mtime)
     fs = 11245.0 #revolution frequency
-    return cls(idxbunch,timestamp,pos,plane,beam,data,fs,betasample,fn)
+    betadt=cls.beta_adt[pos+plane]
+    return cls(idxbunch,timestamp,pos,plane,beam,data,fs,betasample,fn,betadt)
   def orb(self):
     """subtract mean value from orbit"""
     xx=self.data[self.plane]
@@ -147,6 +150,7 @@ class adt():
   def fft_bartlett(self,nfft=None,aavg=20,nslice=None,window=_np.hanning,scale=1.0):
     directory=os.path.dirname(self.filename)
     filenames='%s/*%s%s*%s.mat'%(directory,self.pos,self.plane[:-1].upper(),self.idxbunch)
+    print filenames
     files=sort_files(glob.glob(filenames))
     start= files.index(self.filename)
     if nslice == None or nslice==0 or nslice==1:
@@ -163,6 +167,7 @@ class adt():
       print 'average only over %s files'%aavg
     lfft={'f':[],'fft':[]}
     for ii in start+_np.arange(aavg):#take average over aavg files with larger timestamp
+      print ii
       fn=files[ii]
       dd=adt.getdata(fn)
       for n0 in n0s:
@@ -214,6 +219,8 @@ class adt():
     ff,psd=self.psd_bartlett(nfft=nfft,aavg=aavg,nslice=nslice,window=window,scale=scale)
     _pl.plot(ff[1:],psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
     self.opt_plot_psd(xlog,ylog)
+    #if scale !=1 values are scales with 1/sqrt(beta) -> units are mu 1.e-12*m
+    if abs(scale-1.0)>1.e-6:  _pl.ylabel(r'PSD [$p\mathrm{m}$/Hz]',fontsize=14)
   def plot_fft_bartlett(self,nfft=None,aavg=20,nslice=None,window=None,scale=1.0,lbl=None,color='b',linestyle='-',xlog=True,ylog=True):
     """plot the fft spectrum in mum
     where the fft is averaged with the bartlett method
@@ -227,6 +234,8 @@ class adt():
     ff,fft=self.fft_bartlett(nfft=nfft,aavg=aavg,nslice=nslice,window=window,scale=scale)
     _pl.plot(ff[1:],_np.abs(fft[1:]),color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
     self.opt_plot_fft(xlog,ylog)
+    #if scale !=1 values are scales with 1/sqrt(beta) -> units are mu sqrt(m)
+    if abs(scale-1.0)>1.e-6: _pl.ylabel(r'amplitude [$\mu\sqrt{\rm m}$]')
   def plot_fft(self,nfft=None,n0=0,window=None,scale=1.0,lbl=None,color='b',linestyle='-',xlog=True,ylog=True):
     """plot the fft spectrum in mum
     window = window function
@@ -239,6 +248,8 @@ class adt():
     ff,fft=self.fft(nfft=nfft,window=window,n0=n0,scale=scale)
     _pl.plot(ff[1:],_np.abs(fft[1:]),color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
     self.opt_plot_fft(xlog,ylog)
+    #if scale !=1 values are scales with 1/sqrt(beta) -> units are mu sqrt(m)
+    if abs(scale-1.0)>1.e-6: _pl.ylabel(r'amplitude [$\mu\sqrt{\rm m}$]')
   def plot_orb_fft(self,nfft=None,window=None,n0=0,scale=1.0,lbl=None,color='b',linestyle='-'):
     """plot the orbit [mum] and fft spectrum in mum
     window = window function
@@ -256,12 +267,14 @@ class adt():
     _pl.gcf().set_tight_layout(True)
     _pl.subplot(211)
     _pl.plot(xx,label=lbl,color=color,linestyle=linestyle)
-    self.opt_plot_orb(ylim=(-30,30))
+    self.opt_plot_orb(ylim=(round(-scale*30),round(scale*30)))
+    if abs(scale-1.0)>1.e-6: _pl.ylabel(r'z [$\mu\sqrt{\rm m}$]')
     _pl.legend(loc='lower left')
     _pl.subplot(212)
     self.plot_fft(nfft=nfft,window=window,n0=n0,scale=scale,lbl=lbl,color=color,linestyle=linestyle)
+    if abs(scale-1.0)>1.e-6: _pl.ylabel(r'amplitude [$\mu\sqrt{\rm m}$]')
     _pl.legend(loc='lower left')
-    _pl.ylim(1.e1,1.e6)
+    _pl.ylim(1.e1*scale,1.e6*scale)
     _pl.title('')
   def plot_psd(self,nfft=None,n0=0,window=None,scale=1.0,lbl=None,color='b',linestyle='-',xlog=True,ylog=True):
     """plot the PSD spectrum in mum**2/Hz
@@ -275,6 +288,7 @@ class adt():
     ff,psd=self.psd(nfft=nfft,window=window,n0=n0,scale=scale)
     _pl.plot(ff[1:],psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
     self.opt_plot_psd(xlog,ylog)
+    if abs(scale-1.0)>1.e-6:  _pl.ylabel(r'PSD [$p\mathrm{m}$/Hz]',fontsize=14)
   def plot_orb_psd(self,nfft=None,window=None,n0=0,scale=1.0,lbl=None,color='b',linestyle='-'):
     """plot the orbit [mum] and PSD spectrum in mum**2/Hz
     window = window function
@@ -292,12 +306,16 @@ class adt():
     _pl.gcf().set_tight_layout(True)
     _pl.subplot(211)
     _pl.plot(xx,label=lbl,color=color,linestyle=linestyle)
-    self.opt_plot_orb(ylim=(-30,30))
+    self.opt_plot_orb(ylim=(-round(30*scale),round(30*scale)))
+    #if scale !=1 values are scales with 1/sqrt(beta) -> units are mu sqrt(m)
+    if abs(scale-1.0)>1.e-6: _pl.ylabel(r'z [$\mu\sqrt{\rm m}$]')
     _pl.legend(loc='lower left')
     _pl.subplot(212)
     self.plot_psd(nfft=nfft,n0=n0,window=window,scale=scale,color=color,linestyle=linestyle,lbl='%s, scale=%4.2f'%(lbl,scale))
+    #if scale !=1 values are scales with 1/sqrt(beta) -> units are mu 1.e-12*m
+    if abs(scale-1.0)>1.e-6:  _pl.ylabel(r'PSD [$p\mathrm{m}$/Hz]',fontsize=14)
     _pl.legend(loc='lower left')
-    _pl.ylim(1.e-12,1.e-2)
+    _pl.ylim(1.e-12*scale**2,1.e-2*scale**2)
     _pl.title('')
   def plot_psd_welch(self,n0=0,n1=None,window=_np.hanning,nperseg=4096,noverlap=None,scale=1,lbl=None,color='b',linestyle='-',xlog=True,ylog=True):
     """plot the PSD spectrum in m**2/Hz using the welch method
@@ -318,13 +336,13 @@ class adt():
     _pl.grid(which='both')
     _pl.xlabel('number of turns')
     _pl.ylabel(r'z [$\mu$m]')
-    _pl.title(r'$\beta*_{\rm IP1}=$%4.2f cm, %s'%(self.beta['betaIP1'],dumpdate(self.t0,fmt='%Y-%m-%d %H:%M:%S')))
+    _pl.title(r'$\beta_{\rm IP1}=$%4.2f cm, %s'%(self.beta['betaIP1'],dumpdate(self.t0,fmt='%Y-%m-%d %H:%M:%S')))
   def opt_plot_fft(self,xlog,ylog):
     _pl.xlim(1,100)
     _pl.xlabel(r'f [Hz]')
     _pl.ylabel(r'amplitude [$\mathrm{\mu m}$]')#abs(fft)
     _pl.grid(which='both')
-    _pl.title(r'$\beta*_{\rm IP1}=$%4.2f cm, %s'%(self.beta['betaIP1'],dumpdate(self.t0,fmt='%Y-%m-%d %H:%M:%S')))
+    _pl.title(r'$\beta_{\rm IP1}=$%4.2f cm, %s'%(self.beta['betaIP1'],dumpdate(self.t0,fmt='%Y-%m-%d %H:%M:%S')))
     if(xlog):
       _pl.xscale('log')
     if(ylog):
@@ -334,7 +352,7 @@ class adt():
     _pl.xlabel(r'f [Hz]')
     _pl.ylabel(r'PSD [$\mathrm{\mu m}^2$/Hz]')
     _pl.grid(which='both')
-    _pl.title(r'$\beta*_{\rm IP1}=$%4.2f cm, %s'%(self.beta['betaIP1'],dumpdate(self.t0,fmt='%Y-%m-%d %H:%M:%S')))
+    _pl.title(r'$\beta_{\rm IP1}=$%4.2f cm, %s'%(self.beta['betaIP1'],dumpdate(self.t0,fmt='%Y-%m-%d %H:%M:%S')))
     if(xlog):
       _pl.xscale('log')
     if(ylog):
