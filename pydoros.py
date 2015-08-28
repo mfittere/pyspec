@@ -7,7 +7,7 @@ import glob as glob
 import spec as spec
 from scipy.signal import welch
 from rdmstores import *
-from timbertools import *
+import timbertools as timb
 
 def ipaddress_to_irlr(ipaddress):
   if(ipaddress=='172_18_66_233'):
@@ -158,7 +158,7 @@ class doros():
         #number of valid frames per udp ADC1 buffer
         [b1h1,b1h2,b1v1,b1v2]=ADC1chanTable[0:4]/(2**24-1)
         [b2h1,b2h2,b2v1,b2v2]=ADC2chanTable[0:4]/(2**24-1)
-        betasample=getbetasample(beta,mtime)
+        betasample=timb.getbetasample(beta,mtime)
         #store already processed orbit data in *.p
         pickle.dump([b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime,betasample,ip],open(fn+'.p',"wb"))  
         print '... store b1h1,b1h2,b2h1,b2h2 etc. in file %s.p for faster reload'%(fn.split('/')[-1])

@@ -8,7 +8,8 @@ from rdmstores import *
 import glob as glob
 import os as os
 import cPickle as pickle
-from timbertools import *
+import timbertools as timb
+#from timbertools import *
 
 
 def get_timestamp_adt(fn):
@@ -20,7 +21,7 @@ def get_timestamp_adt(fn):
   time=':'.join([time[0:2],time[3:5],time[6:8]+'.000'])
   return date+' '+time
 def sort_files(files):
-  return (mk_sort_files(get_timestamp_adt))(files)
+  return (timb.mk_sort_files(get_timestamp_adt))(files)
 def get_fn_data(fn):
   """get time stamp, plane and bunch number
   from filename fn"""
@@ -93,7 +94,7 @@ class adt():
     dn = os.path.split(os.path.abspath(fn))[0]#directory of file
     beta = getbeta_adt(dn,force) 
     mtime = strpunix(get_timestamp_adt(fn),'%Y-%m-%d %H:%M:%S.SSS') #get timestamp
-    betasample=getbetasample(beta,mtime)
+    betasample=timb.getbetasample(beta,mtime)
     fs = 11245.0 #revolution frequency
     betadt=cls.beta_adt[pos+plane]
     return cls(idxbunch,timestamp,pos,plane,beam,data,fs,betasample,fn,betadt)
