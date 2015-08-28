@@ -1,5 +1,85 @@
 from rdmstores import *
 import os as os
+import cPickle as pickle
+import glob as glob
+from adt import getbeta_adt
+from doros import getbeta_doros
+import matplotlib.pyplot as _pl
+
+def getbeta(dndata,force=False):
+  """get a file with the beta* values and
+  if it doesn't exist get the data from timber
+  and save the values in dndata/betastar.p.
+  This function just calls the correct function
+  for DOROS/ADT.
+  """
+  if len(glob.glob(dndata+'/*.mat'))>0:#for ADT data
+    beta=getbeta_adt(dndata,force=force)
+  if len(glob.glob(dndata+'/*.bin'))>0:#for DOROS data
+    beta=getbeta_doros(dndata,force=force)
+  return beta
+def plot_beta_intensity(dndata,dnpic,force=False):
+  """plot beta and intensity, save the beta*
+  in dndata/betastar.p and the intensity in
+  dndata/beam_intensity.p.
+  dndata: folder with ADT/DOROS data files
+  dnpic:  folder to store th plots
+  """
+  #- plot beta*
+  beta=getbeta(dndata,force=force)
+  start= dumpdate(beta.t1)
+  end  = dumpdate(beta.t2)
+  print '%s <-> %s'%(start,end)
+  _pl.clf()
+  beta.plot_2d(vscale=1)
+  _pl.savefig(dnpic+'/betastar.png')
+  _pl.figure()
+  if( force==False and os.path.isfile(dndata+'/beam_intensity.p')):
+    bint = pickle.load(open(dndata+'/beam_intensity.p',"rb"))
+    print '%s found!'%(dndata+'/beam_intensity.p')
+  else:
+    try:
+      bint=logdb.get(['LHC.BCTFR.A6R4.B1:BEAM_INTENSITY','LHC.BCTFR.A6R4.B2:BEAM_INTENSITY'],start,end)
+      pickle.dump(bint,open(dndata+'/beam_intensity.p',"wb"))
+      print 'save beam intensity in %s!'%(dndata+'/beam_intensity.p')
+    except IOError:
+      pass
+  if(os.path.isfile(dndata+'/beam_intensity.p')):
+    bint.plot_2d()
+    _pl.savefig(dnpic+'/beam_intensity.png')
+  else:
+    print 'WARNING: beam_intensity.p not found and timber not available'
+    _pl.close(gcf())
+def get_bunch_pattern(dndata,force=False):
+  """print the bunch pattern and save the 
+  bunch intensities in bunch_intensity.p
+  dndata: folder with ADT/DOROS data files
+  """
+  #- plot beta*
+  beta=getbeta(dndata,force=force)
+  start= dumpdate(beta.t1)
+  end  = dumpdate(beta.t2)
+  print '%s <-> %s'%(start,end)
+  if( force==False and os.path.isfile(dndata+'/bunch_intensity.p')):
+    bdat = pickle.load(open(dndata+'/bunch_intensity.p',"rb"))
+    print '%s found!'%(dndata+'/bunch_intensity.p')
+  else:
+    try:
+      bdat=logdb.get(['LHC.BCTFR.A6R4.B1:BUNCH_INTENSITY','LHC.BCTFR.A6R4.B2:BUNCH_INTENSITY'],start,end)
+      pickle.dump(bdat,open(dndata+'/bunch_intensity.p',"wb"))
+    except IOError:
+      pass
+  if(os.path.isfile(dndata+'/bunch_intensity.p')):
+    for bb in '12':
+      bintall=(bdat.data['LHC.BCTFR.A6R4.B'+bb+':BUNCH_INTENSITY'][1]).max(axis=0)
+      bint=bintall[np.nonzero(bintall)]
+      print bint
+      bintmin=bint.min()
+      bintmax=bint.max()
+      print 'number of bunches b%s      : %4.0f'%(bb,len(bint))
+      print 'min/max bunch intensity b%s: %4.2e/%4.2e'%(bb,bintmin,bintmax)
+  else:
+    print 'WARNING: bunch_intensity.p not found and timber not available'
 
 #---- beta*
 def getbetasample(beta,mtime):
