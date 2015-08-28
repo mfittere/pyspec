@@ -2,8 +2,11 @@ from rdmstores import *
 import os as os
 import cPickle as pickle
 import glob as glob
-from adt import getbeta_adt
-from doros import getbeta_doros
+import pyadt as pyadt
+import pydoros as pydoros
+import numpy as _np
+#from pyadt import getbeta_adt
+#from pydoros import getbeta_doros
 import matplotlib.pyplot as _pl
 
 def getbeta(dndata,force=False):
@@ -14,9 +17,9 @@ def getbeta(dndata,force=False):
   for DOROS/ADT.
   """
   if len(glob.glob(dndata+'/*.mat'))>0:#for ADT data
-    beta=getbeta_adt(dndata,force=force)
+    beta=pyadt.getbeta_adt(dndata,force=force)
   if len(glob.glob(dndata+'/*.bin'))>0:#for DOROS data
-    beta=getbeta_doros(dndata,force=force)
+    beta=pydoros.getbeta_doros(dndata,force=force)
   return beta
 def plot_beta_intensity(dndata,dnpic,force=False):
   """plot beta and intensity, save the beta*
@@ -72,7 +75,7 @@ def get_bunch_pattern(dndata,force=False):
   if(os.path.isfile(dndata+'/bunch_intensity.p')):
     for bb in '12':
       bintall=(bdat.data['LHC.BCTFR.A6R4.B'+bb+':BUNCH_INTENSITY'][1]).max(axis=0)
-      bint=bintall[np.nonzero(bintall)]
+      bint=bintall[_np.nonzero(bintall)]
       print bint
       bintmin=bint.min()
       bintmax=bint.max()

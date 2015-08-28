@@ -7,9 +7,7 @@ import glob as glob
 import spec as spec
 from scipy.signal import welch
 from rdmstores import *
-from timbertools import getbetasample
-import sys
-sys.path.append('/Users/mfittere/lib/python/pyspec')
+from timbertools import *
 
 def ipaddress_to_irlr(ipaddress):
   if(ipaddress=='172_18_66_233'):
@@ -72,23 +70,12 @@ def getbeta_doros(dn,force=False):
     beta = pickle.load(open(dn+'/betastar.p',"rb"))
     print '%s found!'%(dn+'/betastar.p')
   else:
-    #all files start at 1 = earliest timestamp
-    fn_1=(glob.glob(dn+'/*_1.bin'))
-    afnmin = _np.argmin([ os.path.getmtime(fn) for fn in fn_1 ])
-    fnmin  = fn_1[afnmin]
-    #get the largest file number = latest timestamp
-    idxmax=[]
-    for fn in fn_1:
-      fnall=glob.glob(fn.replace('_1.bin','_*.bin'))#get all files for filename fn
-      idxmax.append(str(max([ int(((fn.split('.')[0]).split('_'))[-1]) for fn in fnall ]))) #get maximum index
-    fn_max=[ fn.replace('_1.bin','_%s.bin'%idx) for fn,idx in zip(fn_1,idxmax) ]
-    afnmax = _np.argmax([ os.path.getmtime(fn) for fn in fn_max ])
-    fnmax  = fn_max[afnmax]
+    ts = [ os.path.getmtime(fn) for fn in files ]#get timestamps
+    tmin =_np.min(ts) 
+    tmax =_np.max(ts) 
     #add 60 min at beginning and end`
-    start = dumpdate(addtimedelta(os.path.getmtime(fnmin),-60*60))
-    end   = dumpdate(addtimedelta(os.path.getmtime(fnmax),60*60) )
-#    start = doros.getdata(fnmin).dumpdate()
-#    end   = doros.getdata(fnmax).dumpdate()
+    start = dumpdate(addtimedelta(tmin,-60*60))
+    end   = dumpdate(addtimedelta(tmax,60*60) )
     try:
       beta  = logdb.get(['HX:BETASTAR_IP1','HX:BETASTAR_IP2','HX:BETASTAR_IP5','HX:BETASTAR_IP8'],start,end)
       pickle.dump(beta,open(dn+'/betastar.p',"wb"))
