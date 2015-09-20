@@ -219,7 +219,7 @@ class doros():
     the DOROS BPMs"""
     #self.beta['betaIP'+ip]=0 if no value is saved
     if abs(self.beta['betaIP'+self.ip]) > 1.e-8:
-      return self.beta['betaIP'+self.ip]+self.sIP**2/self.beta['betaIP'+self.ip] 
+      return self.beta['betaIP'+self.ip]*1.e-2+self.sIP**2/(self.beta['betaIP'+self.ip]*1.e-2) 
     else:
       return 1.0 #return 1.0, so that psd normalization is not influenced
   def orb(self):
