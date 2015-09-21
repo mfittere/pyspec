@@ -279,21 +279,20 @@ class doros():
     if lbl == None:
       lbl=bb.upper()
     xx     = self.orb()[bb]
-    ff,orbfft = self.fft(bb=bb,nfft=nfft,window=window,scale=scale)
     _pl.clf()
     _pl.subplot(211)
     _pl.plot(xx,label=lbl)
     self.opt_plot_orb(ylim=(-30,30))
-    if abs(scale-1.0)>1.e-6: _pl.ylabel(r'z [$\mu\sqrt{\rm m}$]') 
     _pl.legend(loc='lower left')
     _pl.subplot(212)
+    ff,orbfft = self.fft(bb=bb,nfft=nfft,window=window,scale=scale)
     _pl.plot(ff[1:],_np.abs(orbfft[1:]),color=color,linestyle=linestyle,label='%s, scale=%4.2f'%(lbl,scale))#do not plot DC offset
     self.opt_plot_fft(True,True)
     #if scale !=1 values are scales with 1/sqrt(beta) -> units are mu sqrt(m)
     if abs(scale-1.0)>1.e-6: _pl.ylabel(r'amplitude [$\mu\sqrt{\rm m}$]')
     _pl.title('')
     _pl.legend(loc='lower left')
-    _pl.ylim(1.e-4,1.e6)
+    _pl.ylim(1.e-4,1.e5)
     _pl.tight_layout()
   def plot_orb_psd(self,bb='b1h',nfft=None,window=None,n0=0,scale=1.0,lbl=None,color='b',linestyle='-'):
     """plot the orbit [mum] and PSD spectrum in mum**2/Hz
@@ -310,7 +309,6 @@ class doros():
     _pl.subplot(211)
     _pl.plot(xx,label=lbl)
     self.opt_plot_orb(ylim=(-30,30)) 
-    if abs(scale-1.0)>1.e-6: _pl.ylabel(r'z [$\mu\sqrt{\rm m}$]')
     _pl.legend(loc='lower left')
     _pl.subplot(212)
     _pl.plot(ff[1:],psd[1:],color=color,linestyle=linestyle,label='%s, scale=%4.2f'%(lbl,scale))#do not plot DC offset
@@ -329,7 +327,6 @@ class doros():
         _pl.subplot(int(210+bb))
         _pl.plot(self.orb()['b'+str(bb)+pp],label=('b'+str(bb)+pp).upper()) 
         self.opt_plot_orb()
-        if abs(scale-1.0)>1.e-6: _pl.ylabel(r'z [$\mu\sqrt{\rm m}$]')
     _pl.legend()
   def plot_psd_welch(self,bb='b1h',n0=0,n1=None,window=_np.hanning,nperseg=4096,noverlap=None,scale=1.0,lbl='',color='b',linestyle='-',xlog=True,ylog=True):
     """plot the PSD spectrum in mum**2/Hz using the welch method
