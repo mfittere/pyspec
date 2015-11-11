@@ -260,16 +260,15 @@ class adt():
     """
     if lbl==None:
       lbl='%s %s'%(self.pos,self.plane)
-    xx     = scale*self.orb()
+    xx     = self.orb()
     if(nfft==None):
       nfft=len(xx)-n0
     xx     = xx[n0:n0+nfft] 
     _pl.clf()
     _pl.gcf().set_tight_layout(True)
     _pl.subplot(211)
-    _pl.plot(xx,label=lbl,color=color,linestyle=linestyle)
-    self.opt_plot_orb(ylim=(round(-scale*30),round(scale*30)))
-    if abs(scale-1.0)>1.e-6: _pl.ylabel(r'z [$\mu\sqrt{\rm m}$]')
+    _pl.plot(xx,label='%s %s'%(self.pos,self.plane),color=color,linestyle=linestyle)#remove scale from lbl
+    self.opt_plot_orb()
     _pl.legend(loc='lower left')
     _pl.subplot(212)
     self.plot_fft(nfft=nfft,window=window,n0=n0,scale=scale,lbl=lbl,color=color,linestyle=linestyle)
@@ -299,17 +298,15 @@ class adt():
     """
     if lbl==None:
       lbl='%s %s'%(self.pos,self.plane)
-    xx     = scale*self.orb()
+    xx     = self.orb()
     if(nfft==None):
       nfft=len(xx)-n0
     xx     = xx[n0:n0+nfft] 
     _pl.clf()
     _pl.gcf().set_tight_layout(True)
     _pl.subplot(211)
-    _pl.plot(xx,label=lbl,color=color,linestyle=linestyle)
-    self.opt_plot_orb(ylim=(-round(30*scale),round(30*scale)))
-    #if scale !=1 values are scales with 1/sqrt(beta) -> units are mu sqrt(m)
-    if abs(scale-1.0)>1.e-6: _pl.ylabel(r'z [$\mu\sqrt{\rm m}$]')
+    _pl.plot(xx,label='%s %s'%(self.pos,self.plane),color=color,linestyle=linestyle)#remove scale from lbl
+    self.opt_plot_orb()
     _pl.legend(loc='lower left')
     _pl.subplot(212)
     self.plot_psd(nfft=nfft,n0=n0,window=window,scale=scale,color=color,linestyle=linestyle,lbl='%s, scale=%4.2f'%(lbl,scale))
@@ -332,7 +329,7 @@ class adt():
     ff,psd=self.psd_welch(n0=n0,n1=n1,window=window,nperseg=nperseg,noverlap=noverlap)
     _pl.plot(ff[1:],scale*psd[1:],color=color,linestyle=linestyle,label=lbl)#do not plot DC offset
     self.opt_plot_psd(xlog,ylog)
-  def opt_plot_orb(self,ylim=(-30,30)):
+  def opt_plot_orb(self,ylim=(-20,20)):
     _pl.ylim(ylim)
     _pl.grid(which='both')
     _pl.xlabel('number of turns')
