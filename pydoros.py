@@ -8,6 +8,8 @@ import spec as spec
 from scipy.signal import welch
 from rdmstores import *
 import timbertools as timb
+import datetime
+import time
 
 def ipaddress_to_irlr(ipaddress):
   if(ipaddress=='172_18_66_233'):
@@ -27,6 +29,111 @@ def ipaddress_to_irlr(ipaddress):
     side='L'
     front='frontend 2'
   return ip,side,front
+def getbeta_doros(dn,force=False):
+  files=glob.glob(dn+'/*.bin')
+  if( force==False and os.path.isfile(dn+'/betastar.p')):
+    beta = pickle.load(open(dn+'/betastar.p',"rb"))
+    print '%s found!'%(dn+'/betastar.p')
+  else:
+    ts = [ os.path.getmtime(fn) for fn in files ]#get timestamps
+    tmin =_np.min(ts) 
+    tmax =_np.max(ts) 
+    #add 60 min at beginning and end`
+    start = dumpdate(addtimedelta(tmin,-60*60))
+    end   = dumpdate(addtimedelta(tmax,60*60) )
+    try:
+      beta  = logdb.get(['HX:BETASTAR_IP1','HX:BETASTAR_IP2','HX:BETASTAR_IP5','HX:BETASTAR_IP8'],start,end)
+      pickle.dump(beta,open(dn+'/betastar.p',"wb"))
+    except IOError:
+      print 'ERROR: measurement database can not be accessed!'
+      beta=None
+  return beta
+def _get_data_2(fn,beta=None):
+  HeaderOffset =2
+  ff = open(fn+'.bin','rb')
+  data=_np.fromfile(ff,dtype='uint32')#binary file written in uint32
+  ip,side,front=ipaddress_to_irlr(fn.split('IP')[1])
+  if beta==None: beta=getbeta_doros(os.path.dirname(fn))
+  mtime=os.path.getmtime(fn+'.bin')
+  betasample=timb.getbetasample(beta,mtime)
+  B1NumofChan=data[0]& (2**16-1)#ersten 16 bit von rechts gelesen
+  B2NumofChan=(data[0]&((2**16-1)<<16))>>16
+  Numofsamples = data[1]
+  ADCB1dorCHdata,ADCB2dorCHdata=decode_channel_2(data,B1NumofChan,B2NumofChan,Numofsamples,HeaderOffset)
+  b1h1,b1h2,b1v1,b1v2=ADCB1dorCHdata[:4]
+  b2h1,b2h2,b2v1,b2v2=ADCB2dorCHdata[:4]
+  return [b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime,betasample,ip]   
+def decode_channel_2(data,n1,n2,nsample,header):
+  """decode binary files for files older than
+  30/08/2015"""
+  imax32bit=2**32-1
+  if n1==0 and n2==0: d1,d2=[],[]
+  if n1 >0 and n2==0:
+    d = _np.array(data[header:header+n1*nsample],dtype=_np.float64)/imax32bit
+    d1,d2 = d.reshape(n1,nsample),[]
+  if n1==0 and n2 > 0:
+    d= _np.array(data[header:header+n2*nsample],dtype=_np.float64)/imax32bit
+    d1,d2 = [],d.reshape(n2,nsample)
+  if n1 >0 and n2 > 0:
+    d1aux= _np.array(data[header:header+n1*nsample],dtype=_np.float64)/imax32bit
+    d1=d1aux.reshape(n1,nsample)
+    d2aux= _np.array(data[header+n1*nsample:header+n1*nsample+n2*nsample],dtype=_np.float64)/imax32bit
+    d2=d2aux.reshape(n2,nsample)
+  return d1,d2
+
+def _get_data_1(fn,beta=None):
+  """function to get data before 30/08/2015"""
+  #---- define parameters used for import the datafile ----
+  #ADC=Analog to Digital Converter parameters
+  #Decoding parameters
+  nChan = 8  # number of channel 
+  nByte = 4  # number of bytes per sample
+  nFramePerADCb = 15#number of frames per ADC buffer
+  nADCBuff = 2#number of ADC buffers (or ADCs)
+  nADCchan = 8#Number of ADC channels
+  LheaderData = 8# Data header length
+  LheaderUdp = 20#UDP header length
+  LADCbBuff = nFramePerADCb*nChan*nByte
+  SampleDecimation = 1#data decimation factor
+  #UDP=User Datagram Protocol structure addressing
+  ADCb1nFrameAddr = 17
+  ADCb2nFrameAddr = 18
+  FIFOovfladdr = 19
+  SeqNumberOffset = 1
+  #UDP per frame
+  LdataUdp = nByte*nChan*nFramePerADCb*nADCBuff #number of bytes of UDP data
+  Ludp = LheaderUdp + LdataUdp #UDP header + data length
+  data,udpcheck,ip=readbinary(fn+'.bin',LheaderData,LheaderUdp,LdataUdp)
+  if(udpcheck):#only process data if udp check passed
+    if beta==None: beta=getbeta_doros(os.path.dirname(fn))
+    ADC1chanTable=decode_channel_1(data,ADCb1nFrameAddr,nADCchan,nByte,LADCbBuff,nChan,SampleDecimation,beam='b1')
+    ADC2chanTable=decode_channel_1(data,ADCb2nFrameAddr,nADCchan,nByte,LADCbBuff,nChan,SampleDecimation,beam='b2')
+    #number of valid frames per udp ADC1 buffer
+    [b1h1,b1h2,b1v1,b1v2]=ADC1chanTable[0:4]/(2**24-1)
+    [b2h1,b2h2,b2v1,b2v2]=ADC2chanTable[0:4]/(2**24-1)
+    mtime=os.path.getmtime(fn+'.bin')#ctime gives back the timestamp when the file was created for MAC, instead use mtime, which seems to give back the correct timestamp
+    betasample=timb.getbetasample(beta,mtime)
+    #store already processed orbit data in *.p
+    pickle.dump([b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime,betasample,ip],open(fn+'.p',"wb"))  
+    print '... store b1h1,b1h2,b2h1,b2h2 etc. in file %s.p for faster reload'%(fn.split('/')[-1])
+  else:
+    ip = '1'
+    betasample = None
+    mtime=0
+    [b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2]=[[] for x in range(8)]
+  return [b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime,betasample,ip]
+def decode_channel_1(data,ADCbnFrameAddr,nADCchan,nByte,LADCbBuff,nChan,SampleDecimation,beam='b1'):
+  #extract ADCb[12] buffer
+  ADCbnFrames = data['header'][:,ADCbnFrameAddr-1]
+  nTotalADCbBuffDataFrames = sum(ADCbnFrames)
+  if(beam=='b1'):
+    ADCbData = _np.hstack(_np.array([ data['data'][idx,0:ADCbnFrames[idx]*nADCchan*nByte] for idx in range(len(ADCbnFrames)) ]))
+  if(beam=='b2'):
+    ADCbData = _np.hstack(_np.array([ data['data'][idx,LADCbBuff:LADCbBuff+ADCbnFrames[idx]*nADCchan*nByte] for idx in range(len(ADCbnFrames)) ]))
+  #decode channel data
+  ADCbdataDec=_np.array([ (2**24*ADCbData[4*idx]+2**16*ADCbData[4*idx+1]+2**8*ADCbData[4*idx+2]+ADCbData[4*idx+3]+2**23) & (2**24-1) for idx in range(nTotalADCbBuffDataFrames*nChan) ],dtype=float)
+  ADCchanTable = _np.array([ ADCbdataDec[idx:idx+nTotalADCbBuffDataFrames*nChan:SampleDecimation*nChan] for idx in range(nChan) ])
+  return ADCchanTable
 def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
   """read in the binary file with filename fn
   and return the header in data['header']
@@ -64,77 +171,26 @@ def readbinary(fn,LheaderData=8,LheaderUdp=20,LdataUdp=980):
 #    data['header']=data[LheaderData+Ludp:LheaderData + Ludp*(nUdp-1) +LheaderUdp:Ludp]
 #  return data[0:TotalLenOfFile],udpcheck
   return data,udpcheck,ip
-def getbeta_doros(dn,force=False):
-  files=glob.glob(dn+'/*.bin')
-  if( force==False and os.path.isfile(dn+'/betastar.p')):
-    beta = pickle.load(open(dn+'/betastar.p',"rb"))
-    print '%s found!'%(dn+'/betastar.p')
-  else:
-    ts = [ os.path.getmtime(fn) for fn in files ]#get timestamps
-    tmin =_np.min(ts) 
-    tmax =_np.max(ts) 
-    #add 60 min at beginning and end`
-    start = dumpdate(addtimedelta(tmin,-60*60))
-    end   = dumpdate(addtimedelta(tmax,60*60) )
-    try:
-      beta  = logdb.get(['HX:BETASTAR_IP1','HX:BETASTAR_IP2','HX:BETASTAR_IP5','HX:BETASTAR_IP8'],start,end)
-      pickle.dump(beta,open(dn+'/betastar.p',"wb"))
-    except IOError:
-      print 'ERROR: measurement database can not be accessed!'
-      beta=None
-  return beta
-
-def decode_chan(data,ADCbnFrameAddr,nADCchan,nByte,LADCbBuff,nChan,SampleDecimation,beam='b1'):
-  #extract ADCb[12] buffer
-  ADCbnFrames = data['header'][:,ADCbnFrameAddr-1]
-  nTotalADCbBuffDataFrames = sum(ADCbnFrames)
-  if(beam=='b1'):
-    ADCbData = _np.hstack(_np.array([ data['data'][idx,0:ADCbnFrames[idx]*nADCchan*nByte] for idx in range(len(ADCbnFrames)) ]))
-  if(beam=='b2'):
-    ADCbData = _np.hstack(_np.array([ data['data'][idx,LADCbBuff:LADCbBuff+ADCbnFrames[idx]*nADCchan*nByte] for idx in range(len(ADCbnFrames)) ]))
-  #decode channel data
-  ADCbdataDec=_np.array([ (2**24*ADCbData[4*idx]+2**16*ADCbData[4*idx+1]+2**8*ADCbData[4*idx+2]+ADCbData[4*idx+3]+2**23) & (2**24-1) for idx in range(nTotalADCbBuffDataFrames*nChan) ],dtype=float)
-  ADCchanTable = _np.array([ ADCbdataDec[idx:idx+nTotalADCbBuffDataFrames*nChan:SampleDecimation*nChan] for idx in range(nChan) ])
-  return ADCchanTable
 
 class doros():
   """class to import data from DOROS BPMS"""
   sIP=21.475 #distance from IP [m]
-  #---- define parameters used for import the datafile ----
-  ImSize = 1000
-  #pick - up slope in um, theory is 1/4 of the electrode distance [d],
-  #for BPMC (d = 49) the database says 12.68 mm, 
-  #for BPMSW (d = 61) 15.25 mm
-  PUgain=15250
-  #ADC=Analog to Digital Converter parameters
-  FsamADC = (40*1.e6)/3564.0#sampling frequency
-  Vref = 2.5
-  FullScale = 2^24
-  #Decoding parameters
-  nChan = 8  # number of channel 
-  nByte = 4  # number of bytes per sample
-  nFramePerADCb = 15#number of frames per ADC buffer
-  nADCBuff = 2#number of ADC buffers (or ADCs)
-  nADCchan = 8#Number of ADC channels
-  LheaderData = 8# Data header length
-  LheaderUdp = 20#UDP header length
-  LADCbBuff = nFramePerADCb*nChan*nByte
-  SampleDecimation = 1#data decimation factor
-  #UDP=User Datagram Protocol structure addressing
-  ADCb1nFrameAddr = 17
-  ADCb2nFrameAddr = 18
-  FIFOovfladdr = 19
-  SeqNumberOffset = 1
-  #UDP per frame
-  LdataUdp = nByte*nChan*nFramePerADCb*nADCBuff #number of bytes of UDP data
-  Ludp = LheaderUdp + LdataUdp #UDP header + data length
-  ipadress_frontend = ['172_18_41_214','172_18_53_135','172_18_66_233','172_18_66_234']
   def __init__(self,b1h1=[],b1h2=[],b1v1=[],b1v2=[],b2h1=[],b2h2=[],b2v1=[],b2v2=[],mtime=None,beta=None,ip='1',filename=[]):
     self.filename = filename
     self.ip    = ip
     self.beta  = beta 
     self.mtime = mtime
     self.data  = {'b1h1':_np.array(b1h1),'b1h2':_np.array(b1h2),'b1v1':_np.array(b1v1),'b1v2':_np.array(b1v2),'b2h1':_np.array(b2h1),'b2h2':_np.array(b2h2),'b2v1':_np.array(b2v1),'b2v2':_np.array(b2v2)}
+    #times for which binary file format changed
+    self.t1=time.mktime(datetime.date(2015,8,30).timetuple())
+    #pick - up slope in um, theory is 1/4 of the electrode distance [d],
+    self.elecdist = 61000#electrode distance
+    self.PUgain=self.elecdist/4
+    if mtime < self.t1:
+      self.FsamADC = (40*1.e6)/3564.0#sampling frequency
+    else:
+      self.CaptureDecimationFactor = 20 
+      self.FsamADC = 11245.55/self.CaptureDecimationFactor
   @classmethod
   def getdata(cls,fn,beta=None,force=False):
     """get the data from the binary file fn.bin and save it
@@ -142,48 +198,47 @@ class doros():
     time of binary file. If pickle file already exists, just
     load the pickle file.
     beta is the beta* extracted from timber. read in file
-    with beta=pickle.load(open(fnbeta,"rb"))"""
+    with beta=pickle.load(open(fnbeta,"rb")).
+    
+    Note
+    ---------
+    uses:
+        _get_data_1 for timestamps ... -> 30/08/2015
+        _get_data_2 for timestamps 30/08/2015 -> ..."""
+    #times for which binary file format changed
+    cls.t1=time.mktime(datetime.date(2015,8,30).timetuple())
     if(fn.split('.')[-1]=='bin'):
       fn=fn[0:-4]
     if(fn.split('.')[-1]=='p'):
       fn=fn[0:-2]
     if(os.path.isfile(fn+'.p') and force==False):
+      print 'from *.p file'
       b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime,betasample,ip=pickle.load(open(fn+'.p',"rb"))
     else:
       mtime=os.path.getmtime(fn+'.bin')#ctime gives back the timestamp when the file was created for MAC, instead use mtime, which seems to give back the correct timestamp
-      data,udpcheck,ip=readbinary(fn+'.bin',cls.LheaderData,cls.LheaderUdp,cls.LdataUdp)
-      if(udpcheck):#only process data if udp check passed
-        ADC1chanTable=decode_chan(data,cls.ADCb1nFrameAddr,cls.nADCchan,cls.nByte,cls.LADCbBuff,cls.nChan,cls.SampleDecimation,beam='b1')
-        ADC2chanTable=decode_chan(data,cls.ADCb2nFrameAddr,cls.nADCchan,cls.nByte,cls.LADCbBuff,cls.nChan,cls.SampleDecimation,beam='b2')
-        #number of valid frames per udp ADC1 buffer
-        [b1h1,b1h2,b1v1,b1v2]=ADC1chanTable[0:4]/(2**24-1)
-        [b2h1,b2h2,b2v1,b2v2]=ADC2chanTable[0:4]/(2**24-1)
-        betasample=timb.getbetasample(beta,mtime)
-        #store already processed orbit data in *.p
-        pickle.dump([b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime,betasample,ip],open(fn+'.p',"wb"))  
-        print '... store b1h1,b1h2,b2h1,b2h2 etc. in file %s.p for faster reload'%(fn.split('/')[-1])
-      else:
-        ip = '1'
-        betasample = None
-        mtime=0
-        [b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2]=[[] for x in range(8)]
+      if mtime<cls.t1: [b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime,betasample,ip]=_get_data_1(fn,beta)
+      if mtime>cls.t1: [b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime,betasample,ip]=_get_data_2(fn,beta)
     return cls(b1h1,b1h2,b1v1,b1v2,b2h1,b2h2,b2v1,b2v2,mtime,betasample,ip,fn)
   def checkdata(self,fn):
-    """check for errors in data acquisition"""
-    LeAll = os.path.getsize(fn)#total file byte length
-    nUdp = (LeAll - self.LheaderData)/self.Ludp #number of UDPs
-    dataAll=_np.fromfile(file=fn,dtype=_np.uint8,count=-1,sep="")
-    #Extract how many UDPs were lost from sequential number
-    idx=self.LheaderData + self.SeqNumberOffset-1
-    iUdpFirst = 2**24*dataAll[idx] + 2**16*dataAll[idx + 1] + 2**8*dataAll[idx + 2] + dataAll[idx + 3]
-    iUdpLast =2**24*dataAll[idx + self.Ludp*(nUdp - 1)] + 2**16*dataAll[idx + 1 + self.Ludp*(nUdp - 1)] + 2**8*dataAll[idx + 2 + self.Ludp*(nUdp - 1)] + dataAll[idx + 3 + self.Ludp*(nUdp - 1)]
-    nUdpLost=iUdpLast - iUdpFirst - nUdp + 1 # number of lost UDPs
-    print "iUdpFirst=%d"%(iUdpFirst)
-    print "iUdpLast =%d"%(iUdpLast)
-    print "nUdpLost =%d"%(nUdpLost)
-    #check FIFO overflow
-    FIFOovfl = sum(dataAll[self.LheaderData + self.FIFOovfladdr-1:self.LheaderData + self.FIFOovfladdr+self.Ludp*(nUdp-1)-1:self.Ludp])
-    print "FIFOovfl =%d"%(FIFOovfl)
+    """check for errors in data acquisition for
+    files with timestamps ... -> 30/08/2015"""
+    if os.path.getmtime(fn+'.bin')<self.t1:
+      LeAll = os.path.getsize(fn)#total file byte length
+      nUdp = (LeAll - self.LheaderData)/self.Ludp #number of UDPs
+      dataAll=_np.fromfile(file=fn,dtype=_np.uint8,count=-1,sep="")
+      #Extract how many UDPs were lost from sequential number
+      idx=self.LheaderData + self.SeqNumberOffset-1
+      iUdpFirst = 2**24*dataAll[idx] + 2**16*dataAll[idx + 1] + 2**8*dataAll[idx + 2] + dataAll[idx + 3]
+      iUdpLast =2**24*dataAll[idx + self.Ludp*(nUdp - 1)] + 2**16*dataAll[idx + 1 + self.Ludp*(nUdp - 1)] + 2**8*dataAll[idx + 2 + self.Ludp*(nUdp - 1)] + dataAll[idx + 3 + self.Ludp*(nUdp - 1)]
+      nUdpLost=iUdpLast - iUdpFirst - nUdp + 1 # number of lost UDPs
+      print "iUdpFirst=%d"%(iUdpFirst)
+      print "iUdpLast =%d"%(iUdpLast)
+      print "nUdpLost =%d"%(nUdpLost)
+      #check FIFO overflow
+      FIFOovfl = sum(dataAll[self.LheaderData + self.FIFOovfladdr-1:self.LheaderData + self.FIFOovfladdr+self.Ludp*(nUdp-1)-1:self.Ludp])
+      print "FIFOovfl =%d"%(FIFOovfl)
+    else:
+      print "WARNING: check only necessary for files with timestampes <  30/08/2015"""
   @classmethod
   def process_dir(cls,dn,force=False):
     """process orbit data in directory dn and
